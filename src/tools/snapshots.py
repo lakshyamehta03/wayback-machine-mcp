@@ -3,13 +3,19 @@ from typing import List
 from wayback_mcp.client.http import get
 from wayback_mcp.client.parsers import parse_availability, parse_cdx
 from wayback_mcp.config import AVAILABILITY_URL, CDX_MAX_RESULTS, CDX_URL
-from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError
+from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError, rate_limited_error
 
 
 async def check_availability(
     url: str,
     timestamp: str | None = None,
 ) -> AvailabilityResult | ToolError:
+    """Check whether the Wayback Machine has a snapshot for the URL.
+
+    Responses are cached at the HTTP layer for the cdx bucket TTL, so a
+    no-timestamp lookup ("most recent snapshot") may miss a brand-new
+    capture for up to that TTL.
+    """
     params: dict[str, str] = {"url": url}
     if timestamp:
         params["timestamp"] = timestamp
@@ -17,7 +23,8 @@ async def check_availability(
     response = await get(AVAILABILITY_URL, "cdx", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return rate_limited_error(retry_after)
 
     try:
         data = response.json()
@@ -50,7 +57,8 @@ async def lookup_snapshots(
     response = await get(CDX_URL, "cdx", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return rate_limited_error(retry_after)
 
     try:
         raw = response.json()

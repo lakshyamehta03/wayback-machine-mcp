@@ -1,7 +1,7 @@
 from wayback_mcp.client.http import get
 from wayback_mcp.client.parsers import parse_cdx, parse_search_archive
 from wayback_mcp.config import CDX_URL, CDX_MAX_RESULTS, SEARCH_MAX_RESULTS, SEARCH_URL
-from wayback_mcp.models import SearchResult, Snapshot, ToolError
+from wayback_mcp.models import SearchResult, Snapshot, ToolError, rate_limited_error
 
 
 def _build_query(
@@ -37,7 +37,8 @@ async def search_archive(
     response = await get(SEARCH_URL, "search", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return rate_limited_error(retry_after)
 
     try:
         raw = response.json()
@@ -76,7 +77,8 @@ async def search_domain(
     response = await get(CDX_URL, "cdx", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return rate_limited_error(retry_after)
 
     try:
         raw = response.json()

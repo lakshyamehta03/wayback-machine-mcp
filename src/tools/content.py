@@ -2,7 +2,7 @@ from wayback_mcp.client.extractor import classify_mime, extract_html, extract_pl
 from wayback_mcp.client.http import get
 from wayback_mcp.client.parsers import parse_item_metadata
 from wayback_mcp.config import METADATA_URL, WAYBACK_CONTENT_BASE
-from wayback_mcp.models import ItemMetadata, SnapshotContent, ToolError
+from wayback_mcp.models import ItemMetadata, SnapshotContent, ToolError, rate_limited_error
 from wayback_mcp.tools.snapshots import check_availability, lookup_snapshots
 
 
@@ -32,7 +32,8 @@ async def get_snapshot_content(url: str, timestamp: str | None = None) -> Snapsh
     response = await get(content_url, "content")
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return rate_limited_error(retry_after)
 
     result = extract_html(response.text) if mime_class == "html" else extract_plaintext(response.text)
 
@@ -52,7 +53,8 @@ async def get_item_metadata(identifier: str) -> ItemMetadata | ToolError:
     response = await get(f"{METADATA_URL}/{identifier}", "metadata")
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return rate_limited_error(retry_after)
 
     try:
         data = response.json()
