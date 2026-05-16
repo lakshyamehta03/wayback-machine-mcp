@@ -12,7 +12,7 @@ Python MCP server giving Claude structured access to the Internet Archive's Wayb
 ## Project structure
 
 ```
-src/
+src/                           # Python source — maps to wayback_mcp package
   server.py          # MCP entry point, tool/prompt/resource registration
   config.py          # Rate limits, timeouts, endpoint URLs, User-Agent, result caps
   models.py          # All Pydantic input/output models (centralized)
@@ -46,7 +46,7 @@ uv run pytest --integration    # unit + integration tests (hits live IA APIs)
 - All tuneable values (rate limits, result caps, endpoint URLs, User-Agent) live in `config.py`
 - Tool handlers are `async def` throughout; use `httpx.AsyncClient`
 - Expected failures (snapshot not found, unsupported MIME type, rate limited) return structured errors via `ToolError`; unexpected failures raise exceptions
-- Pydantic models are defined in `src/models.py`, not inline in tool files
+- Pydantic models are defined in `src/models.py` (installed as `wayback_mcp.models`), not inline in tool files
 
 ## Agent skills
 
