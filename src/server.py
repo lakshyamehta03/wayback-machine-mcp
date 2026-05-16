@@ -1,5 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 
+from wayback_mcp.models import ToolError
 from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
 from wayback_mcp.tools.content import get_snapshot_content as _get_snapshot_content
 from wayback_mcp.tools.snapshots import (
@@ -76,6 +77,15 @@ async def get_item_metadata(identifier: str) -> dict:
     """Fetch rich structured metadata for any Internet Archive item by its identifier."""
     result = await _get_item_metadata(identifier)
     return result.model_dump()
+
+
+@mcp.resource("wayback://item/{identifier}", mime_type="application/json")
+async def item_resource(identifier: str) -> str:
+    """Full Internet Archive item metadata as JSON, addressed by identifier."""
+    result = await _get_item_metadata(identifier)
+    if isinstance(result, ToolError):
+        raise ValueError(result.error)
+    return result.model_dump_json()
 
 
 def main() -> None:
