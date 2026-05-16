@@ -10,6 +10,12 @@ async def check_availability(
     url: str,
     timestamp: str | None = None,
 ) -> AvailabilityResult | ToolError:
+    """Check whether the Wayback Machine has a snapshot for the URL.
+
+    Responses are cached at the HTTP layer for the cdx bucket TTL, so a
+    no-timestamp lookup ("most recent snapshot") may miss a brand-new
+    capture for up to that TTL.
+    """
     params: dict[str, str] = {"url": url}
     if timestamp:
         params["timestamp"] = timestamp
@@ -17,7 +23,8 @@ async def check_availability(
     response = await get(AVAILABILITY_URL, "cdx", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
 
     try:
         data = response.json()
@@ -50,7 +57,8 @@ async def lookup_snapshots(
     response = await get(CDX_URL, "cdx", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
 
     try:
         raw = response.json()

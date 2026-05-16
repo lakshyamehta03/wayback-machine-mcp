@@ -37,7 +37,8 @@ async def search_archive(
     response = await get(SEARCH_URL, "search", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
 
     try:
         raw = response.json()
@@ -76,7 +77,8 @@ async def search_domain(
     response = await get(CDX_URL, "cdx", params=params)
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
 
     try:
         raw = response.json()

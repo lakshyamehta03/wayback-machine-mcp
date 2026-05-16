@@ -22,3 +22,11 @@ MAX_RETRIES = 3
 
 CDX_MAX_RESULTS = 50
 SEARCH_MAX_RESULTS = 50
+
+CACHE_MAX_ENTRIES = 256
+CACHE_TTLS: dict[str, float] = {
+    "metadata": 24 * 60 * 60,
+    "content": 24 * 60 * 60,
+    "cdx": 60 * 60,
+    "search": 15 * 60,
+}
