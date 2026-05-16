@@ -1,7 +1,50 @@
 from wayback_mcp.client.http import get
-from wayback_mcp.client.parsers import parse_cdx
-from wayback_mcp.config import CDX_URL, CDX_MAX_RESULTS
-from wayback_mcp.models import Snapshot, ToolError
+from wayback_mcp.client.parsers import parse_cdx, parse_search_archive
+from wayback_mcp.config import CDX_URL, CDX_MAX_RESULTS, SEARCH_MAX_RESULTS, SEARCH_URL
+from wayback_mcp.models import SearchResult, Snapshot, ToolError
+
+
+def _build_query(
+    query: str,
+    mediatype: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+) -> str:
+    q = query
+    if mediatype:
+        q += f" AND mediatype:{mediatype}"
+    if year_from or year_to:
+        lo = str(year_from) if year_from else "*"
+        hi = str(year_to) if year_to else "*"
+        q += f" AND year:[{lo} TO {hi}]"
+    return q
+
+
+async def search_archive(
+    query: str,
+    mediatype: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    limit: int | None = None,
+) -> list[SearchResult] | ToolError:
+    params: dict[str, str] = {
+        "q": _build_query(query, mediatype, year_from, year_to),
+        "output": "json",
+        "rows": str(min(limit, SEARCH_MAX_RESULTS) if limit else SEARCH_MAX_RESULTS),
+        "fl": "identifier,title,mediatype,year,creator,subject,downloads",
+    }
+
+    response = await get(SEARCH_URL, "search", params=params)
+
+    if response.status_code == 429:
+        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+
+    try:
+        raw = response.json()
+    except Exception:
+        return []
+
+    return parse_search_archive(raw)
 
 
 def _match_type(domain: str) -> str:
