@@ -1,5 +1,14 @@
 import pytest
 
+from wayback_mcp.client import http as _http_module
+
+
+@pytest.fixture(autouse=True)
+def _clear_response_cache():
+    _http_module._response_cache.clear()
+    yield
+    _http_module._response_cache.clear()
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(

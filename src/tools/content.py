@@ -32,7 +32,8 @@ async def get_snapshot_content(url: str, timestamp: str | None = None) -> Snapsh
     response = await get(content_url, "content")
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
 
     result = extract_html(response.text) if mime_class == "html" else extract_plaintext(response.text)
 
@@ -52,7 +53,8 @@ async def get_item_metadata(identifier: str) -> ItemMetadata | ToolError:
     response = await get(f"{METADATA_URL}/{identifier}", "metadata")
 
     if response.status_code == 429:
-        return ToolError(error="Rate limited by the Wayback Machine. Try again later.")
+        retry_after = response.headers.get("Retry-After", "5")
+        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
 
     try:
         data = response.json()
