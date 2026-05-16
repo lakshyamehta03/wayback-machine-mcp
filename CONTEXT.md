@@ -56,3 +56,16 @@ Built the CDX lookup pipeline:
 - CDX `fl=` param controls which columns appear in the header row; parser zips against that header so field order is flexible
 - `search_domain` shares `parse_cdx` — the CDX parser is generic across both CDX tools
 - CDX `limit` param prevents accidentally downloading hundreds of rows; always cap at `CDX_MAX_RESULTS`
+
+### Issue #3 — `search_domain` CDX tool (done)
+
+Built domain/prefix URL discovery on top of the existing CDX pipeline:
+
+- `src/tools/search.py` `search_domain(domain, from_date, to_date, status_code, limit)`: auto-detects `matchType` via `_match_type` (bare domain → `"domain"`, path present → `"prefix"`); always sends `collapse=urlkey`; reuses `parse_cdx` — no new parser needed
+- `src/server.py`: `search_domain` tool registered
+- 12 unit tests (respx mocks) + 2 integration tests (live IA)
+
+**Learnings:**
+- `collapse=urlkey` is essential — without it, heavily-crawled domains return one row per snapshot, not per URL
+- CDX wildcard format: bare domain → `url=*.example.com` with `matchType=domain`; path prefix → `url=example.com/blog*` with `matchType=prefix`
+- `_match_type` heuristic is the public contract — no `match_type` param is exposed to callers

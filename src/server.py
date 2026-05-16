@@ -4,6 +4,7 @@ from wayback_mcp.tools.snapshots import (
     check_availability as _check_availability,
     lookup_snapshots as _lookup_snapshots,
 )
+from wayback_mcp.tools.search import search_domain as _search_domain
 
 mcp = FastMCP("wayback-mcp")
 
@@ -28,6 +29,21 @@ async def lookup_snapshots(
     if hasattr(result, "model_dump"):
         return [result.model_dump()]
     return [s.model_dump() for s in result]
+
+
+@mcp.tool()
+async def search_domain(
+    domain: str,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    status_code: str | None = None,
+    limit: int | None = None,
+) -> list[dict] | dict:
+    """Find archived URLs under a domain or path prefix. Auto-detects matchType from input."""
+    result = await _search_domain(domain, from_date, to_date, status_code, limit)
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    return [r.model_dump() for r in result]
 
 
 def main() -> None:
