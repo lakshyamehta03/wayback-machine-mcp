@@ -32,23 +32,15 @@
 
 ## Installation
 
-Requires Python 3.11+ and [`uv`](https://github.com/astral-sh/uv).
+Requires Python 3.11+.
 
 ```bash
-git clone https://github.com/lakshyamehta03/wayback-machine-mcp.git
-cd wayback-machine-mcp
-uv sync
+pip install wayback-mcp
 ```
+
+> _Once published to PyPI._ Until then, see [Development](#development) for the from-source workflow.
 
 ## Usage
-
-### Run the server
-
-```bash
-uv run wayback-mcp
-```
-
-The server speaks MCP over stdio.
 
 ### Wire it into Claude Desktop
 
@@ -58,14 +50,26 @@ Add an entry to `claude_desktop_config.json` (on macOS: `~/Library/Application S
 {
   "mcpServers": {
     "wayback": {
-      "command": "uv",
-      "args": ["--directory", "/absolute/path/to/wayback-machine-mcp", "run", "wayback-mcp"]
+      "command": "wayback-mcp"
     }
   }
 }
 ```
 
 Restart Claude Desktop. The `wayback` tools, prompts, and resources will appear in the MCP picker.
+
+If you prefer not to install globally, run it on demand with [`uvx`](https://github.com/astral-sh/uv):
+
+```json
+{
+  "mcpServers": {
+    "wayback": {
+      "command": "uvx",
+      "args": ["wayback-mcp"]
+    }
+  }
+}
+```
 
 ### Optional: Internet Archive authentication
 
@@ -100,49 +104,20 @@ Get keys at <https://archive.org/account/s3.php>.
 | `audit_link_rot` | Bulk-check URLs and surface archived alternatives |
 | `setup_authentication` | Walks the user through configuring IA S3 keys |
 
-## Project structure
-
-```
-src/                  # wayback_mcp package
-  server.py           # MCP entry point — tools, prompts, resources
-  config.py           # Rate limits, timeouts, endpoint URLs, caps
-  models.py           # All Pydantic input/output models
-  tools/              # search, snapshots, content
-  client/             # http, rate_limiter, parsers
-tests/
-  integration/        # Real IA API calls — opt-in via --integration
-research/             # PRD, design decisions, API research
-docs/adr/             # Architecture decision records
-CONTEXT.md            # Domain glossary, invariants, implementation notes
-```
-
 ## Development
 
-### Running tests
+Requires Python 3.11+ and [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
+git clone https://github.com/lakshyamehta03/wayback-machine-mcp.git
+cd wayback-machine-mcp
+uv sync
+uv run wayback-mcp             # run the server
 uv run pytest                  # unit tests (httpx mocked via respx)
 uv run pytest --integration    # also hit live Internet Archive APIs
 ```
 
 CI runs the unit suite on every push and pull request via GitHub Actions.
-
-### Architectural invariants
-
-These are enforced — see [`CONTEXT.md`](CONTEXT.md) for the full list:
-
-- All IA requests route through `client/http.py` → `client/rate_limiter.py`. Tool files never call IA directly.
-- All tuneable values (rate limits, result caps, endpoint URLs, User-Agent) live in `config.py`.
-- Pydantic models live in `src/models.py`, never inline in tool files.
-- Expected failures return `ToolError`; unexpected failures raise.
-
-## Documentation
-
-- [`CONTEXT.md`](CONTEXT.md) — domain glossary, invariants, verified live-API quirks
-- [`research/PRD.md`](research/PRD.md) — full product requirements
-- [`research/design-decisions.md`](research/design-decisions.md) — finalised design review outcomes
-- [`research/wayback-mcp-research.md`](research/wayback-mcp-research.md) — API feasibility study and prior art
-- [`docs/adr/`](docs/adr/) — architecture decision records
 
 ## License
 
