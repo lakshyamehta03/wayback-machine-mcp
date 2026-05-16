@@ -1,0 +1,36 @@
+[project]
+name = "wayback-mcp"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+wayback-mcp = "wayback_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["wayback_mcp", "wayback_mcp.client", "wayback_mcp.tools"]
+
+[tool.setuptools.package-dir]
+"wayback_mcp" = "src"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests as integration (deselected by default)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.20",
+]
