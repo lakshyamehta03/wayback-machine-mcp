@@ -8,10 +8,13 @@ METADATA_URL = "https://archive.org/metadata"
 USER_AGENT = f"WaybackMCP/1.0 Python/{sys.version_info.major}.{sys.version_info.minor}"
 
 # Tokens per second per endpoint group
+WAYBACK_CONTENT_BASE = "https://web.archive.org/web"
+
 RATE_LIMITS: dict[str, float] = {
     "cdx": 2.0,
     "search": 0.5,
     "metadata": 1.0,
+    "content": 2.0,
 }
 
 REQUEST_TIMEOUT = 30.0  # seconds

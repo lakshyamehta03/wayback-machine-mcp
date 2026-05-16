@@ -59,5 +59,16 @@ class ItemMetadata(BaseModel):
     files: List[dict] = []
 
 
+class SnapshotContent(BaseModel):
+    content: Optional[str]
+    content_type: str  # "html" | "plain" | "declined"
+    extraction_method: Optional[str]
+    word_count: Optional[int]
+    truncated: bool
+    snapshot_url: str
+    timestamp: str
+    sparse_content_warning: bool
+
+
 class ToolError(BaseModel):
     error: str
