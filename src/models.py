@@ -45,5 +45,19 @@ class SearchResult(BaseModel):
     downloads: Optional[int] = None
 
 
+class ItemMetadata(BaseModel):
+    identifier: str
+    title: Optional[str] = None
+    creator: Optional[Union[str, List[str]]] = None
+    subject: Optional[Union[str, List[str]]] = None
+    year: Optional[str] = None
+    mediatype: Optional[str] = None
+    description: Optional[Union[str, List[str]]] = None
+    downloads: Optional[int] = None
+    item_size: Optional[int] = None
+    file_count: int = 0
+    files: List[dict] = []
+
+
 class ToolError(BaseModel):
     error: str

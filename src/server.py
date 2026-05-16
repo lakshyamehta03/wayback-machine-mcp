@@ -1,5 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 
+from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
 from wayback_mcp.tools.snapshots import (
     check_availability as _check_availability,
     lookup_snapshots as _lookup_snapshots,
@@ -60,6 +61,13 @@ async def search_domain(
     if hasattr(result, "model_dump"):
         return result.model_dump()
     return [r.model_dump() for r in result]
+
+
+@mcp.tool()
+async def get_item_metadata(identifier: str) -> dict:
+    """Fetch rich structured metadata for any Internet Archive item by its identifier."""
+    result = await _get_item_metadata(identifier)
+    return result.model_dump()
 
 
 def main() -> None:

@@ -1,6 +1,6 @@
 from typing import List
 
-from wayback_mcp.models import AvailabilityResult, SearchResult, Snapshot
+from wayback_mcp.models import AvailabilityResult, ItemMetadata, SearchResult, Snapshot
 
 
 def parse_cdx(raw: list) -> List[Snapshot]:
@@ -41,6 +41,34 @@ def parse_search_archive(data: dict) -> List[SearchResult]:
         except (KeyError, TypeError):
             continue
     return results
+
+
+def _normalize_str_or_list(value) -> list | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def parse_item_metadata(data: dict) -> ItemMetadata:
+    meta = data.get("metadata", {})
+    item = data.get("item") or {}
+    files = data.get("files_sample") or []
+
+    return ItemMetadata(
+        identifier=meta["identifier"],
+        title=meta.get("title"),
+        creator=_normalize_str_or_list(meta.get("creator")),
+        subject=_normalize_str_or_list(meta.get("subject")),
+        year=meta.get("year"),
+        mediatype=meta.get("mediatype"),
+        description=meta.get("description"),
+        downloads=item.get("downloads"),
+        item_size=item.get("item_size"),
+        file_count=len(files),
+        files=files,
+    )
 
 
 def parse_availability(url: str, data: dict) -> AvailabilityResult:
