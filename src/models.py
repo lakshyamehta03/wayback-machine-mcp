@@ -28,5 +28,12 @@ class Snapshot(BaseModel):
         return f"https://web.archive.org/web/{self.timestamp}if_/{self.original_url}"
 
 
+class DomainUrl(BaseModel):
+    url: str
+    timestamp: str
+    status_code: str
+    mimetype: str
+
+
 class ToolError(BaseModel):
     error: str

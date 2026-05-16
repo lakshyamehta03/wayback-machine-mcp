@@ -42,3 +42,17 @@ Built the full foundational stack end-to-end:
 **Learnings:**
 - Live `bbc.com` + historical timestamp no longer returns a snapshot as of May 2026; integration tests should target `archive.org` itself
 - Token bucket lock is held during `asyncio.sleep` — correct for sequential rate limiting but would serialize concurrent callers (acceptable for v1 MCP server)
+
+### Issue #2 — `lookup_snapshots` CDX tool (done)
+
+Built the CDX lookup pipeline:
+
+- `src/client/parsers.py` `parse_cdx(raw)`: skips header row (`raw[0]`), zips each data row against the header, returns `list[Snapshot]`; `len(raw) <= 1` guard returns `[]`
+- `src/tools/snapshots.py` `lookup_snapshots(url, from_date, to_date, status_code, limit)`: builds CDX params with `fl=` field selector, default limit from `CDX_MAX_RESULTS`, optional `filter=statuscode:N`; catches `JSONDecodeError` → `[]`
+- `src/server.py`: `lookup_snapshots` tool registered
+- 4 unit tests + 1 integration test
+
+**Learnings:**
+- CDX `fl=` param controls which columns appear in the header row; parser zips against that header so field order is flexible
+- `search_domain` shares `parse_cdx` — the CDX parser is generic across both CDX tools
+- CDX `limit` param prevents accidentally downloading hundreds of rows; always cap at `CDX_MAX_RESULTS`
