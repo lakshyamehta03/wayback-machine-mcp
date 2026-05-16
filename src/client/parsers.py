@@ -1,6 +1,6 @@
 from typing import List
 
-from wayback_mcp.models import AvailabilityResult, Snapshot
+from wayback_mcp.models import AvailabilityResult, SearchResult, Snapshot
 
 
 def parse_cdx(raw: list) -> List[Snapshot]:
@@ -19,6 +19,28 @@ def parse_cdx(raw: list) -> List[Snapshot]:
             length=fields.get("length"),
         ))
     return snapshots
+
+
+def parse_search_archive(data: dict) -> List[SearchResult]:
+    try:
+        docs = data["response"]["docs"]
+    except (KeyError, TypeError):
+        return []
+    results = []
+    for doc in docs:
+        try:
+            results.append(SearchResult(
+                identifier=doc["identifier"],
+                title=doc["title"],
+                mediatype=doc["mediatype"],
+                year=doc.get("year"),
+                creator=doc.get("creator"),
+                subject=doc.get("subject"),
+                downloads=doc.get("downloads"),
+            ))
+        except (KeyError, TypeError):
+            continue
+    return results
 
 
 def parse_availability(url: str, data: dict) -> AvailabilityResult:

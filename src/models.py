@@ -35,5 +35,15 @@ class DomainUrl(BaseModel):
     mimetype: str
 
 
+class SearchResult(BaseModel):
+    identifier: str
+    title: str
+    mediatype: str
+    year: Optional[Union[int, str]] = None
+    creator: Optional[Union[str, List[str]]] = None
+    subject: Optional[Union[str, List[str]]] = None
+    downloads: Optional[int] = None
+
+
 class ToolError(BaseModel):
     error: str

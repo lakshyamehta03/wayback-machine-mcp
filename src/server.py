@@ -4,6 +4,7 @@ from wayback_mcp.tools.snapshots import (
     check_availability as _check_availability,
     lookup_snapshots as _lookup_snapshots,
 )
+from wayback_mcp.tools.search import search_archive as _search_archive
 from wayback_mcp.tools.search import search_domain as _search_domain
 
 mcp = FastMCP("wayback-mcp")
@@ -29,6 +30,21 @@ async def lookup_snapshots(
     if hasattr(result, "model_dump"):
         return [result.model_dump()]
     return [s.model_dump() for s in result]
+
+
+@mcp.tool()
+async def search_archive(
+    query: str,
+    mediatype: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    limit: int | None = None,
+) -> list[dict] | dict:
+    """Search Internet Archive collections using Lucene query syntax. Supports mediatype and year range filters."""
+    result = await _search_archive(query, mediatype, year_from, year_to, limit)
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    return [r.model_dump() for r in result]
 
 
 @mcp.tool()
