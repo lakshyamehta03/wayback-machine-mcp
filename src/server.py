@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 
 from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
+from wayback_mcp.tools.content import get_snapshot_content as _get_snapshot_content
 from wayback_mcp.tools.snapshots import (
     check_availability as _check_availability,
     lookup_snapshots as _lookup_snapshots,
@@ -61,6 +62,13 @@ async def search_domain(
     if hasattr(result, "model_dump"):
         return result.model_dump()
     return [r.model_dump() for r in result]
+
+
+@mcp.tool()
+async def get_snapshot_content(url: str, timestamp: str | None = None) -> dict:
+    """Fetch and extract text content from an archived web page. Returns extracted text, word count, and extraction metadata."""
+    result = await _get_snapshot_content(url, timestamp)
+    return result.model_dump()
 
 
 @mcp.tool()
