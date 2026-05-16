@@ -9,6 +9,7 @@ from wayback_mcp.config import (
     RATE_LIMITS,
     REQUEST_TIMEOUT,
     USER_AGENT,
+    ia_credentials,
 )
 from wayback_mcp.client.cache import ResponseCache
 from wayback_mcp.client.rate_limiter import RateLimiter
@@ -28,8 +29,14 @@ async def get(
 
     await _rate_limiter.acquire(rate_key)
 
+    headers = {"User-Agent": USER_AGENT}
+    creds = ia_credentials()
+    if creds is not None:
+        access, secret = creds
+        headers["Authorization"] = f"LOW {access}:{secret}"
+
     async with httpx.AsyncClient(
-        headers={"User-Agent": USER_AGENT},
+        headers=headers,
         timeout=REQUEST_TIMEOUT,
         follow_redirects=True,
     ) as client:

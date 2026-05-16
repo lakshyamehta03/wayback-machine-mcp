@@ -72,3 +72,18 @@ class SnapshotContent(BaseModel):
 
 class ToolError(BaseModel):
     error: str
+
+
+def rate_limited_error(retry_after: str | int | float) -> "ToolError":
+    """Build the standard 429 ToolError, appending an auth-setup hint when unconfigured."""
+    from wayback_mcp.config import ia_credentials
+
+    msg = f"Rate limited by the Wayback Machine. Retry after {retry_after}s."
+    if ia_credentials() is None:
+        msg += (
+            " Tip: configure free Internet Archive API keys to raise your "
+            "rate-limit ceiling — render the `setup_authentication` prompt for "
+            "step-by-step instructions, or visit "
+            "https://archive.org/account/s3.php directly."
+        )
+    return ToolError(error=msg)

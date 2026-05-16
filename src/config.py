@@ -1,3 +1,4 @@
+import os
 import sys
 
 AVAILABILITY_URL = "https://archive.org/wayback/available"
@@ -30,3 +31,15 @@ CACHE_TTLS: dict[str, float] = {
     "cdx": 60 * 60,
     "search": 15 * 60,
 }
+
+
+def ia_credentials() -> tuple[str, str] | None:
+    """Return (access_key, secret_key) if both IA S3 keys are configured, else None.
+
+    Read at call time so tests can use monkeypatch.setenv without reload tricks.
+    """
+    access = os.environ.get("WAYBACK_MCP_IA_ACCESS_KEY")
+    secret = os.environ.get("WAYBACK_MCP_IA_SECRET_KEY")
+    if access and secret:
+        return access, secret
+    return None

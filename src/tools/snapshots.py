@@ -3,7 +3,7 @@ from typing import List
 from wayback_mcp.client.http import get
 from wayback_mcp.client.parsers import parse_availability, parse_cdx
 from wayback_mcp.config import AVAILABILITY_URL, CDX_MAX_RESULTS, CDX_URL
-from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError
+from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError, rate_limited_error
 
 
 async def check_availability(
@@ -24,7 +24,7 @@ async def check_availability(
 
     if response.status_code == 429:
         retry_after = response.headers.get("Retry-After", "5")
-        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
+        return rate_limited_error(retry_after)
 
     try:
         data = response.json()
@@ -58,7 +58,7 @@ async def lookup_snapshots(
 
     if response.status_code == 429:
         retry_after = response.headers.get("Retry-After", "5")
-        return ToolError(error=f"Rate limited by the Wayback Machine. Retry after {retry_after}s.")
+        return rate_limited_error(retry_after)
 
     try:
         raw = response.json()

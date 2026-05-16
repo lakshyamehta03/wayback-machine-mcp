@@ -28,7 +28,12 @@ EXPECTED_TOOLS = {
     "get_item_metadata",
 }
 
-EXPECTED_PROMPTS = {"research_topic", "track_site_changes", "audit_link_rot"}
+EXPECTED_PROMPTS = {
+    "research_topic",
+    "track_site_changes",
+    "audit_link_rot",
+    "setup_authentication",
+}
 
 
 @pytest.mark.asyncio
