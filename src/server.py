@@ -11,7 +11,7 @@ from wayback_mcp.tools.snapshots import (
 from wayback_mcp.tools.search import search_archive as _search_archive
 from wayback_mcp.tools.search import search_domain as _search_domain
 
-mcp = FastMCP("wayback-mcp")
+mcp = FastMCP("wayback")
 
 
 @mcp.tool()
@@ -170,13 +170,12 @@ def setup_authentication() -> str:
         "https://archive.org/account/s3.php — copy your access key and secret key.\n\n"
         "2. Open your `claude_desktop_config.json` "
         "(on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`). "
-        "Add an `\"env\"` block to the wayback-mcp server entry:\n\n"
+        "Add an `\"env\"` block to the wayback server entry:\n\n"
         "```json\n"
         "{\n"
         '  \"mcpServers\": {\n'
         '    \"wayback\": {\n'
-        '      \"command\": \"uv\",\n'
-        '      \"args\": [\"run\", \"wayback-mcp\"],\n'
+        '      \"command\": \"mcp-server-wayback\",\n'
         '      \"env\": {\n'
         '        \"WAYBACK_MCP_IA_ACCESS_KEY\": \"<paste access key>\",\n'
         '        \"WAYBACK_MCP_IA_SECRET_KEY\": \"<paste secret key>\"\n'
@@ -185,10 +184,10 @@ def setup_authentication() -> str:
         "  }\n"
         "}\n"
         "```\n\n"
-        "3. Restart Claude Desktop. The wayback-mcp server will pick up the keys "
+        "3. Restart Claude Desktop. The server will pick up the keys "
         "and authenticate every Internet Archive request from now on.\n\n"
         "Your keys never leave your machine — they live only in this config file "
-        "and the wayback-mcp subprocess's environment. Anthropic never sees them."
+        "and the server subprocess's environment. Anthropic never sees them."
     )
 
 

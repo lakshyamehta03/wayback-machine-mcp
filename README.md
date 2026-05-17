@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Wayback_Machine_logo_2010.svg" alt="Wayback Machine" width="420" />
+<img src="https://raw.githubusercontent.com/lakshyamehta03/wayback-machine-mcp/main/Wayback_Machine_logo_2010.svg" alt="Wayback Machine" width="420" />
 
 # wayback-mcp
 
@@ -35,7 +35,7 @@
 Requires Python 3.11+.
 
 ```bash
-pip install wayback-mcp
+pip install mcp-server-wayback
 ```
 
 > _Once published to PyPI._ Until then, see [Development](#development) for the from-source workflow.
@@ -50,7 +50,7 @@ Add an entry to `claude_desktop_config.json` (on macOS: `~/Library/Application S
 {
   "mcpServers": {
     "wayback": {
-      "command": "wayback-mcp"
+      "command": "mcp-server-wayback"
     }
   }
 }
@@ -65,7 +65,7 @@ If you prefer not to install globally, run it on demand with [`uvx`](https://git
   "mcpServers": {
     "wayback": {
       "command": "uvx",
-      "args": ["wayback-mcp"]
+      "args": ["mcp-server-wayback"]
     }
   }
 }
@@ -112,7 +112,7 @@ Requires Python 3.11+ and [`uv`](https://github.com/astral-sh/uv).
 git clone https://github.com/lakshyamehta03/wayback-machine-mcp.git
 cd wayback-machine-mcp
 uv sync
-uv run wayback-mcp             # run the server
+uv run mcp-server-wayback      # run the server
 uv run pytest                  # unit tests (httpx mocked via respx)
 uv run pytest --integration    # also hit live Internet Archive APIs
 ```
@@ -121,7 +121,7 @@ CI runs the unit suite on every push and pull request via GitHub Actions.
 
 ## License
 
-No license file is currently included in this repository. The Wayback Machine logo is © Internet Archive and used here under fair use to identify the upstream service this project integrates with.
+[MIT](LICENSE). The Wayback Machine logo is © Internet Archive and used here under fair use to identify the upstream service this project integrates with.
 
 ## Acknowledgments
 

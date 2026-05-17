@@ -1,6 +1,6 @@
 """End-to-end stdio smoke test.
 
-Spawns the wayback-mcp server as a real subprocess via the MCP stdio
+Spawns the mcp-server-wayback server as a real subprocess via the MCP stdio
 transport and verifies the protocol surface is wired up correctly. Closes
 the gap where in-process tests against `mcp.get_prompt()` pass even if the
 stdio entry point is broken, a decorator is missing, or the package is not
@@ -17,7 +17,7 @@ from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 
-SERVER_PARAMS = StdioServerParameters(command="uv", args=["run", "wayback-mcp"])
+SERVER_PARAMS = StdioServerParameters(command="uv", args=["run", "mcp-server-wayback"])
 
 EXPECTED_TOOLS = {
     "check_availability",

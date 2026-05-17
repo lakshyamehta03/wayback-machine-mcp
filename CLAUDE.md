@@ -35,7 +35,7 @@ tests/
 ## Commands
 
 ```bash
-uv run wayback-mcp             # run server (stdio)
+uv run mcp-server-wayback      # run server (stdio)
 uv run pytest                  # unit tests (mocked via respx)
 uv run pytest --integration    # unit + integration tests (hits live IA APIs)
 ```
