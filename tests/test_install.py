@@ -13,12 +13,16 @@ from pathlib import Path
 import pytest
 
 from wayback_mcp.install import (
+    ACCESS_KEY_ENV,
     CLIENTS,
+    SECRET_KEY_ENV,
     SERVER_ENTRY,
     SERVER_KEY,
+    clear_auth,
     get_client,
     install,
     pick_client_interactively,
+    set_auth,
     uninstall,
 )
 
@@ -258,3 +262,183 @@ def test_pick_client_returns_none_on_eof() -> None:
     result = pick_client_interactively(stream_in=stream_in, stream_out=stream_out)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# set_auth / clear_auth
+# ---------------------------------------------------------------------------
+
+
+def _install_for_test(tmp_path: Path) -> Path:
+    """Helper: stand up a fresh config with the wayback entry installed."""
+    p = tmp_path / "config.json"
+    install("claude-desktop", path=p)
+    return p
+
+
+def test_set_auth_writes_keys_into_env(tmp_path: Path) -> None:
+    p = _install_for_test(tmp_path)
+
+    rc = set_auth(
+        "claude-desktop",
+        path=p,
+        access_key="ACCESS123",
+        secret_key="SECRET456",
+    )
+
+    assert rc == 0
+    data = _read(p)
+    env = data["mcpServers"][SERVER_KEY]["env"]
+    assert env[ACCESS_KEY_ENV] == "ACCESS123"
+    assert env[SECRET_KEY_ENV] == "SECRET456"
+
+
+def test_set_auth_preserves_other_env_vars(tmp_path: Path) -> None:
+    p = _install_for_test(tmp_path)
+    # Pre-seed an unrelated env var.
+    data = _read(p)
+    data["mcpServers"][SERVER_KEY]["env"] = {"CUSTOM_VAR": "keep-me"}
+    p.write_text(json.dumps(data))
+
+    set_auth("claude-desktop", path=p, access_key="A", secret_key="B")
+
+    env = _read(p)["mcpServers"][SERVER_KEY]["env"]
+    assert env["CUSTOM_VAR"] == "keep-me"
+    assert env[ACCESS_KEY_ENV] == "A"
+    assert env[SECRET_KEY_ENV] == "B"
+
+
+def test_set_auth_strips_whitespace(tmp_path: Path) -> None:
+    p = _install_for_test(tmp_path)
+
+    set_auth(
+        "claude-desktop",
+        path=p,
+        access_key="  ACCESS  \n",
+        secret_key="\tSECRET\n",
+    )
+
+    env = _read(p)["mcpServers"][SERVER_KEY]["env"]
+    assert env[ACCESS_KEY_ENV] == "ACCESS"
+    assert env[SECRET_KEY_ENV] == "SECRET"
+
+
+def test_set_auth_errors_when_wayback_not_installed(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    p = tmp_path / "config.json"
+    p.write_text("{}")  # exists but no wayback
+
+    rc = set_auth("claude-desktop", path=p, access_key="A", secret_key="B")
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "wayback isn't in" in err
+    assert "--install" in err
+
+
+def test_set_auth_errors_when_config_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    p = tmp_path / "nope.json"  # doesn't exist
+
+    rc = set_auth("claude-desktop", path=p, access_key="A", secret_key="B")
+
+    assert rc == 1
+    assert "--install" in capsys.readouterr().err
+
+
+def test_set_auth_works_for_zed_under_context_servers(tmp_path: Path) -> None:
+    p = tmp_path / "settings.json"
+    install("zed", path=p)
+
+    set_auth("zed", path=p, access_key="ZA", secret_key="ZB")
+
+    data = _read(p)
+    env = data["context_servers"][SERVER_KEY]["env"]
+    assert env[ACCESS_KEY_ENV] == "ZA"
+    assert env[SECRET_KEY_ENV] == "ZB"
+
+
+def test_set_auth_prompts_when_keys_not_passed(tmp_path: Path) -> None:
+    p = _install_for_test(tmp_path)
+    from io import StringIO
+
+    stream_in = StringIO("MY_ACCESS\n")
+    stream_out = StringIO()
+    captured: list[str] = []
+
+    def fake_read_secret(prompt: str) -> str:
+        captured.append(prompt)
+        return "MY_SECRET"
+
+    rc = set_auth(
+        "claude-desktop",
+        path=p,
+        stream_in=stream_in,
+        stream_out=stream_out,
+        read_secret=fake_read_secret,
+    )
+
+    assert rc == 0
+    env = _read(p)["mcpServers"][SERVER_KEY]["env"]
+    assert env[ACCESS_KEY_ENV] == "MY_ACCESS"
+    assert env[SECRET_KEY_ENV] == "MY_SECRET"
+    assert captured  # read_secret was actually used
+
+
+def test_clear_auth_removes_keys_only(tmp_path: Path) -> None:
+    p = _install_for_test(tmp_path)
+    set_auth("claude-desktop", path=p, access_key="A", secret_key="B")
+    # Also seed an unrelated env var.
+    data = _read(p)
+    data["mcpServers"][SERVER_KEY]["env"]["CUSTOM"] = "keep-me"
+    p.write_text(json.dumps(data))
+
+    rc = clear_auth("claude-desktop", path=p)
+
+    assert rc == 0
+    env = _read(p)["mcpServers"][SERVER_KEY]["env"]
+    assert ACCESS_KEY_ENV not in env
+    assert SECRET_KEY_ENV not in env
+    assert env["CUSTOM"] == "keep-me"
+
+
+def test_clear_auth_removes_empty_env_block(tmp_path: Path) -> None:
+    p = _install_for_test(tmp_path)
+    set_auth("claude-desktop", path=p, access_key="A", secret_key="B")
+
+    clear_auth("claude-desktop", path=p)
+
+    entry = _read(p)["mcpServers"][SERVER_KEY]
+    assert "env" not in entry
+
+
+def test_clear_auth_when_no_keys_set_is_noop(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    p = _install_for_test(tmp_path)
+
+    rc = clear_auth("claude-desktop", path=p)
+
+    assert rc == 0
+    assert "nothing to clear" in capsys.readouterr().out
+
+
+def test_clear_auth_missing_config_is_noop(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    rc = clear_auth("claude-desktop", path=tmp_path / "nope.json")
+
+    assert rc == 0
+    assert "nothing to clear" in capsys.readouterr().out
+
+
+def test_install_prints_set_auth_hint_when_no_keys(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    install("claude-desktop", path=tmp_path / "c.json")
+
+    out = capsys.readouterr().out
+    assert "--set-auth" in out
+    assert "archive.org/account/s3.php" in out

@@ -16,6 +16,7 @@ Supported clients:
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import platform
@@ -23,6 +24,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+IA_KEYS_URL = "https://archive.org/account/s3.php"
+ACCESS_KEY_ENV = "WAYBACK_MCP_IA_ACCESS_KEY"
+SECRET_KEY_ENV = "WAYBACK_MCP_IA_SECRET_KEY"
 
 SERVER_KEY = "wayback"
 SERVER_ENTRY = {
@@ -206,8 +211,19 @@ def install(
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
-    print(f"✓ Added wayback to {config_path}")
+    abs_path = config_path.resolve()
+    entry = servers[SERVER_KEY]
+    has_auth = bool(entry.get("env", {}).get(ACCESS_KEY_ENV) and entry.get("env", {}).get(SECRET_KEY_ENV))
+
+    print(f"✓ Added wayback to {abs_path}")
     print(f"Restart {client.label} to load it.")
+    if not has_auth:
+        print()
+        print("Optional but recommended: configure free Internet Archive API keys")
+        print("to raise your rate-limit ceiling and avoid 429 errors.")
+        print(f"  1. Get keys (free, 30s): {IA_KEYS_URL}")
+        print(f"  2. Run: mcp-server-wayback --set-auth {client.key}")
+        print("  3. Restart your client.")
     return 0
 
 
@@ -247,7 +263,155 @@ def uninstall(
         del config[client.container_key]
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
-    print(f"✓ Removed wayback from {config_path}")
+    print(f"✓ Removed wayback from {config_path.resolve()}")
+    print(f"Restart {client.label} for the change to take effect.")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Auth key setup — agent-agnostic, writes to whichever client's config the
+# wayback entry already lives in.
+# ---------------------------------------------------------------------------
+
+
+def _read_text(prompt: str, stream_in, stream_out) -> str:
+    print(prompt, end="", file=stream_out, flush=True)
+    line = stream_in.readline()
+    if not line:
+        return ""
+    return line.strip()
+
+
+def set_auth(
+    client_key: str = "claude-desktop",
+    *,
+    path: Path | None = None,
+    access_key: str | None = None,
+    secret_key: str | None = None,
+    stream_in=None,
+    stream_out=None,
+    read_secret: Callable[[str], str] | None = None,
+) -> int:
+    """Write IA S3 keys into the env block of the chosen client's wayback entry.
+
+    Prompts interactively for any key not passed explicitly. Secret key reads
+    via getpass so it doesn't echo. Preserves any other env vars already set.
+    """
+    stream_in = stream_in or sys.stdin
+    stream_out = stream_out or sys.stdout
+    read_secret = read_secret or getpass.getpass
+
+    client = get_client(client_key)
+    if client is None:
+        print(
+            f"error: unknown client '{client_key}'. Supported: {_client_keys_csv()}",
+            file=sys.stderr,
+        )
+        return 2
+
+    config_path = path or client.config_path()
+
+    if not config_path.exists():
+        print(
+            f"error: no config at {config_path}.\n"
+            f"Run `mcp-server-wayback --install {client.key}` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        config = _load_config(config_path)
+    except json.JSONDecodeError as e:
+        print(f"error: {config_path} isn't valid JSON ({e}).", file=sys.stderr)
+        return 1
+
+    servers = config.get(client.container_key, {})
+    if SERVER_KEY not in servers:
+        print(
+            f"error: wayback isn't in {config_path}.\n"
+            f"Run `mcp-server-wayback --install {client.key}` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if access_key is None:
+        print(f"Get free IA API keys at {IA_KEYS_URL}", file=stream_out)
+        access_key = _read_text("Access key: ", stream_in, stream_out)
+    access_key = access_key.strip()
+    if not access_key:
+        print("error: access key is required.", file=sys.stderr)
+        return 1
+
+    if secret_key is None:
+        secret_key = read_secret("Secret key (hidden): ")
+    secret_key = secret_key.strip()
+    if not secret_key:
+        print("error: secret key is required.", file=sys.stderr)
+        return 1
+
+    entry = servers[SERVER_KEY]
+    env = entry.setdefault("env", {})
+    env[ACCESS_KEY_ENV] = access_key
+    env[SECRET_KEY_ENV] = secret_key
+
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+
+    print(f"✓ Wrote IA auth keys to {config_path.resolve()}")
+    print(f"Restart {client.label} to activate them.")
+    return 0
+
+
+def clear_auth(
+    client_key: str = "claude-desktop",
+    *,
+    path: Path | None = None,
+) -> int:
+    """Remove IA S3 keys from the chosen client's wayback env block.
+
+    Preserves any other env vars. Removes the env block entirely if it becomes
+    empty.
+    """
+    client = get_client(client_key)
+    if client is None:
+        print(
+            f"error: unknown client '{client_key}'. Supported: {_client_keys_csv()}",
+            file=sys.stderr,
+        )
+        return 2
+
+    config_path = path or client.config_path()
+
+    if not config_path.exists():
+        print(f"No config at {config_path} — nothing to clear.")
+        return 0
+
+    try:
+        config = _load_config(config_path)
+    except json.JSONDecodeError as e:
+        print(f"error: {config_path} isn't valid JSON ({e}).", file=sys.stderr)
+        return 1
+
+    servers = config.get(client.container_key, {})
+    if SERVER_KEY not in servers:
+        print(f"wayback isn't in {config_path} — nothing to clear.")
+        return 0
+
+    entry = servers[SERVER_KEY]
+    env = entry.get("env", {})
+    removed = False
+    for key in (ACCESS_KEY_ENV, SECRET_KEY_ENV):
+        if key in env:
+            del env[key]
+            removed = True
+    if "env" in entry and not entry["env"]:
+        del entry["env"]
+
+    if not removed:
+        print(f"No IA auth keys found in {config_path} — nothing to clear.")
+        return 0
+
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    print(f"✓ Cleared IA auth keys from {config_path.resolve()}")
     print(f"Restart {client.label} for the change to take effect.")
     return 0
 

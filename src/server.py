@@ -7,8 +7,10 @@ from wayback_mcp.config import ia_credentials
 from wayback_mcp.install import (
     CLIENTS,
     auth_setup_guide,
+    clear_auth,
     install,
     pick_client_interactively,
+    set_auth,
     uninstall,
 )
 from wayback_mcp.models import ToolError
@@ -215,6 +217,28 @@ def main() -> None:
         help="Remove this server from an MCP client's config. Same arg semantics as --install.",
     )
     parser.add_argument(
+        "--set-auth",
+        nargs="?",
+        const="<pick>",
+        default=None,
+        metavar="CLIENT",
+        dest="set_auth",
+        help=(
+            "Write Internet Archive S3 keys into the wayback entry of an MCP "
+            "client's config. Prompts for keys interactively. Same arg semantics "
+            "as --install."
+        ),
+    )
+    parser.add_argument(
+        "--clear-auth",
+        nargs="?",
+        const="<pick>",
+        default=None,
+        metavar="CLIENT",
+        dest="clear_auth",
+        help="Remove Internet Archive S3 keys from a client's wayback entry. Same arg semantics as --install.",
+    )
+    parser.add_argument(
         "--list-clients",
         action="store_true",
         help="Print the supported client keys for --install / --uninstall and exit.",
@@ -244,8 +268,15 @@ def main() -> None:
             print(f"  {c.key:24s}  {c.label}")
         sys.exit(0)
 
-    if args.install is not None and args.uninstall is not None:
-        parser.error("--install and --uninstall are mutually exclusive")
+    mutex = [
+        ("--install", args.install),
+        ("--uninstall", args.uninstall),
+        ("--set-auth", args.set_auth),
+        ("--clear-auth", args.clear_auth),
+    ]
+    active = [name for name, val in mutex if val is not None]
+    if len(active) > 1:
+        parser.error(f"{', '.join(active)} are mutually exclusive")
 
     if args.install is not None:
         client_key = args.install
@@ -274,5 +305,33 @@ def main() -> None:
                 sys.exit(1)
             client_key = picked.key
         sys.exit(uninstall(client_key))
+
+    if args.set_auth is not None:
+        client_key = args.set_auth
+        if client_key == "<pick>":
+            picked = pick_client_interactively()
+            if picked is None:
+                print(
+                    "Cancelled. Pass a client name to skip the picker, e.g. "
+                    "`--set-auth claude-desktop`. See --list-clients for options.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            client_key = picked.key
+        sys.exit(set_auth(client_key))
+
+    if args.clear_auth is not None:
+        client_key = args.clear_auth
+        if client_key == "<pick>":
+            picked = pick_client_interactively()
+            if picked is None:
+                print(
+                    "Cancelled. Pass a client name to skip the picker, e.g. "
+                    "`--clear-auth claude-desktop`. See --list-clients for options.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            client_key = picked.key
+        sys.exit(clear_auth(client_key))
 
     mcp.run(transport="stdio")
