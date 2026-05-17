@@ -220,11 +220,24 @@ def main() -> None:
         help="Print the supported client keys for --install / --uninstall and exit.",
     )
     parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Print the installed version and exit.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="With --install, overwrite an existing wayback entry.",
     )
     args = parser.parse_args()
+
+    if args.version:
+        from importlib.metadata import PackageNotFoundError, version
+        try:
+            print(version("mcp-server-wayback"))
+        except PackageNotFoundError:
+            print("unknown (package metadata not found)")
+        sys.exit(0)
 
     if args.list_clients:
         for c in CLIENTS:

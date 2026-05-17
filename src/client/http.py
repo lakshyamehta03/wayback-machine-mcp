@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import httpx
 
@@ -15,6 +16,7 @@ from wayback_mcp.config import (
 )
 from wayback_mcp.client.cache import ResponseCache
 from wayback_mcp.client.rate_limiter import RateLimiter
+from wayback_mcp.log import log
 from wayback_mcp.models import ToolError, rate_limited_error
 
 _rate_limiter = RateLimiter(RATE_LIMITS)
@@ -27,11 +29,17 @@ async def get(
     rate_key: str,
     params: dict | None = None,
 ) -> httpx.Response | ToolError:
+    log("get.enter", key=rate_key, url=url)
+
     cached = await _response_cache.get(url, params)
     if cached is not None:
+        log("get.cache_hit", key=rate_key, url=url)
         return cached
 
+    log("rate_limiter.acquire.start", key=rate_key)
+    t0 = time.monotonic()
     await _rate_limiter.acquire(rate_key)
+    log("rate_limiter.acquire.end", key=rate_key, waited_s=f"{time.monotonic() - t0:.3f}")
 
     headers = {"User-Agent": USER_AGENT}
     creds = ia_credentials()
@@ -50,11 +58,36 @@ async def get(
 
         for attempt in range(MAX_RETRIES):
             request_error: httpx.RequestError | None = None
+            log("semaphore.acquire.start", key=rate_key, attempt=attempt)
+            sem_t0 = time.monotonic()
             async with _request_semaphore:
+                log(
+                    "semaphore.acquired",
+                    key=rate_key,
+                    attempt=attempt,
+                    waited_s=f"{time.monotonic() - sem_t0:.3f}",
+                )
+                http_t0 = time.monotonic()
                 try:
+                    log("http.get.start", key=rate_key, attempt=attempt, timeout=timeout)
                     response = await client.get(url, params=params)
+                    log(
+                        "http.get.end",
+                        key=rate_key,
+                        attempt=attempt,
+                        status=response.status_code,
+                        elapsed_s=f"{time.monotonic() - http_t0:.3f}",
+                    )
                 except httpx.RequestError as exc:
+                    log(
+                        "http.get.error",
+                        key=rate_key,
+                        attempt=attempt,
+                        exc=type(exc).__name__,
+                        elapsed_s=f"{time.monotonic() - http_t0:.3f}",
+                    )
                     request_error = exc
+            log("semaphore.released", key=rate_key, attempt=attempt)
 
             if request_error is not None:
                 if attempt < MAX_RETRIES - 1:
