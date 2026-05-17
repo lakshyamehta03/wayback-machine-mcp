@@ -85,23 +85,21 @@ async def get_item_metadata(identifier: str) -> dict:
 
 
 @mcp.prompt()
-def research_topic(
-    topic: str,
-    year_from: int | None = None,
-    year_to: int | None = None,
-    max_items: int = 5,
-) -> str:
-    """Research a topic across Internet Archive collections and synthesise an overview."""
-    year_clause = ""
-    if year_from is not None or year_to is not None:
-        year_clause = f" Restrict to the year range {year_from}–{year_to}."
+def research_topic(topic: str) -> str:
+    """Research a topic across Internet Archive collections and synthesise an overview.
+
+    Takes a single free-text `topic` argument. Time ranges and sample sizes
+    are interpreted from the topic phrasing by the model (e.g. "the moon
+    landing in the 1960s" → year range 1960–1969).
+    """
     return (
-        f"Research the topic: {topic!r}.{year_clause}\n\n"
+        f"Research the topic: {topic!r}.\n\n"
         f"Workflow:\n"
-        f"1. Call `search_archive` with query={topic!r} once per mediatype in "
-        f"['texts', 'audio', 'movies'], passing year_from={year_from} and "
-        f"year_to={year_to}, limit={max_items}.\n"
-        f"2. From the combined results, pick the {max_items} most relevant items "
+        f"1. Call `search_archive` with a query derived from the topic above, "
+        f"once per mediatype in ['texts', 'audio', 'movies']. If the topic "
+        f"implies a time range, pass `year_from` / `year_to` accordingly; "
+        f"otherwise omit them. Use `limit=5` per call.\n"
+        f"2. From the combined results, pick the 5 most relevant items "
         f"(prefer high download counts and titles that clearly match the topic).\n"
         f"3. For each chosen item, call `get_item_metadata` with its identifier to "
         f"enrich the entry with description, creator, subject, and file information.\n"
@@ -111,27 +109,26 @@ def research_topic(
 
 
 @mcp.prompt()
-def track_site_changes(
-    url: str,
-    from_date: str | None = None,
-    to_date: str | None = None,
-    sample_size: int = 5,
-) -> str:
-    """Narrate how an archived web page changed over time using sampled snapshots."""
-    range_clause = f" between {from_date} and {to_date}" if (from_date or to_date) else ""
+def track_site_changes(url: str) -> str:
+    """Narrate how an archived web page changed over time using sampled snapshots.
+
+    Takes a single free-text `url` argument. Date ranges are interpreted from
+    the surrounding context by the model when present.
+    """
     return (
-        f"Trace how {url} changed over time{range_clause}.\n\n"
+        f"Trace how {url} changed over time.\n\n"
         f"Workflow:\n"
-        f"1. Call `lookup_snapshots` with url={url!r}, from_date={from_date!r}, "
-        f"to_date={to_date!r} to enumerate all available captures.\n"
-        f"2. From that list, sample {sample_size} snapshots: always include the "
-        f"first and last, and pick the remaining evenly-spaced across the middle. "
-        f"Do NOT fetch every snapshot — sampling keeps token usage bounded.\n"
-        f"3. For each sampled snapshot, call `get_snapshot_content` with the URL and "
-        f"the snapshot's timestamp to extract its text.\n"
+        f"1. Call `lookup_snapshots` with url={url!r} to enumerate available "
+        f"captures. If the user's request implies a date range, pass "
+        f"`from_date` / `to_date` (YYYYMMDD) accordingly.\n"
+        f"2. From that list, sample 5 snapshots: always include the first and "
+        f"last, and pick the remaining evenly-spaced across the middle. Do NOT "
+        f"fetch every snapshot — sampling keeps token usage bounded.\n"
+        f"3. For each sampled snapshot, call `get_snapshot_content` with the URL "
+        f"and the snapshot's timestamp to extract its text.\n"
         f"4. Compare the extracted content across timestamps and narrate what "
-        f"changed: structural shifts, content rewrites, additions, removals, tone. "
-        f"Reference each snapshot by its timestamp.\n"
+        f"changed: structural shifts, content rewrites, additions, removals, "
+        f"tone. Reference each snapshot by its timestamp.\n"
     )
 
 
