@@ -1,6 +1,10 @@
+import argparse
+import sys
+
 from mcp.server.fastmcp import FastMCP
 
 from wayback_mcp.config import ia_credentials
+from wayback_mcp.install import install, uninstall
 from wayback_mcp.models import ToolError
 from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
 from wayback_mcp.tools.content import get_snapshot_content as _get_snapshot_content
@@ -201,4 +205,31 @@ async def item_resource(identifier: str) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="mcp-server-wayback",
+        description="MCP server for the Internet Archive's Wayback Machine.",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--install",
+        action="store_true",
+        help="Add this server to Claude Desktop's config and exit.",
+    )
+    group.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove this server from Claude Desktop's config and exit.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --install, overwrite an existing wayback entry.",
+    )
+    args = parser.parse_args()
+
+    if args.install:
+        sys.exit(install(force=args.force))
+    if args.uninstall:
+        sys.exit(uninstall())
+
     mcp.run(transport="stdio")

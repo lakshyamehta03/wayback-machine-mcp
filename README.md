@@ -32,7 +32,21 @@
 
 ## Quick start
 
-Add this to your `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+One command, then restart Claude Desktop:
+
+```bash
+uvx mcp-server-wayback --install
+```
+
+That's it. The installer writes the `wayback` entry into your `claude_desktop_config.json` (merging with anything already there) and prints a restart hint. To remove it later: `uvx mcp-server-wayback --uninstall`.
+
+> Need [`uvx`](https://docs.astral.sh/uv/getting-started/installation/)? `brew install uv` on macOS, or `pipx install uv`. Python 3.11+ required.
+
+### Other clients
+
+- **Claude Code**: `claude mcp add wayback -- uvx mcp-server-wayback`
+- **Smithery** (cross-client install for Cursor, Windsurf, etc.): [smithery.ai/server/mcp-server-wayback](https://smithery.ai/server/mcp-server-wayback)
+- **Anything else**: most clients accept an MCP config block — use this one:
 
 ```json
 {
@@ -40,28 +54,6 @@ Add this to your `claude_desktop_config.json` (on macOS: `~/Library/Application 
     "wayback": {
       "command": "uvx",
       "args": ["mcp-server-wayback"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop. That's it — `uvx` fetches the package on first run, no install step needed. The `wayback` tools, prompts, and resources will appear in the MCP picker.
-
-> Need [`uvx`](https://docs.astral.sh/uv/getting-started/installation/)? `brew install uv` on macOS, or `pipx install uv`. Python 3.11+ required.
-
-### Alternative: install globally with pip
-
-```bash
-pip install mcp-server-wayback
-```
-
-Then point Claude Desktop at the installed script:
-
-```json
-{
-  "mcpServers": {
-    "wayback": {
-      "command": "mcp-server-wayback"
     }
   }
 }
