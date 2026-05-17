@@ -45,8 +45,7 @@ That's it. The installer writes the `wayback` entry into your `claude_desktop_co
 ### Other clients
 
 - **Claude Code**: `claude mcp add wayback -- uvx mcp-server-wayback`
-- **Smithery** (cross-client install for Cursor, Windsurf, etc.): [smithery.ai/server/mcp-server-wayback](https://smithery.ai/server/mcp-server-wayback)
-- **Anything else**: most clients accept an MCP config block — use this one:
+- **Anything else** (Cursor, Windsurf, Codex CLI, Zed, etc.): most clients accept an MCP config block — use this one:
 
 ```json
 {
