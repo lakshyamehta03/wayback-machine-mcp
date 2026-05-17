@@ -35,29 +35,35 @@
 
 ### As an MCP server
 
-#### One-line installers
-
-Pick your client:
-
-**Claude Desktop** (writes the config for you, then restart the app):
+#### Interactive installer (recommended)
 
 ```bash
 uvx mcp-server-wayback --install
 ```
 
-**Claude Code**:
+You'll get a numbered menu of supported clients — pick one, the installer writes the config for you, then restart that client. Run `uvx mcp-server-wayback --list-clients` to see the menu without launching it.
+
+#### Non-interactive installers
+
+Pass the client key explicitly (handy for scripts and dotfiles):
+
+```bash
+uvx mcp-server-wayback --install claude-desktop
+uvx mcp-server-wayback --install claude-code-user        # ~/.claude.json
+uvx mcp-server-wayback --install claude-code-project     # ./.mcp.json in cwd
+uvx mcp-server-wayback --install cursor                  # ./.cursor/mcp.json
+uvx mcp-server-wayback --install windsurf
+uvx mcp-server-wayback --install zed                     # uses Zed's context_servers key
+```
+
+For clients with their own MCP CLI:
 
 ```bash
 claude mcp add wayback -- uvx mcp-server-wayback
-```
-
-**Codex CLI**:
-
-```bash
 codex mcp add wayback -- uvx mcp-server-wayback
 ```
 
-To include Internet Archive API keys for higher rate limits:
+To include Internet Archive API keys for higher rate limits at install time:
 
 ```bash
 claude mcp add wayback \
@@ -111,9 +117,10 @@ Open Claude Code from that folder — it picks up `.mcp.json` automatically. Add
 #### Uninstalling
 
 ```bash
-uvx mcp-server-wayback --uninstall   # Claude Desktop
-claude mcp remove wayback            # Claude Code
-codex mcp remove wayback             # Codex CLI
+uvx mcp-server-wayback --uninstall                  # interactive picker
+uvx mcp-server-wayback --uninstall claude-desktop   # or pass a client key
+claude mcp remove wayback                           # Claude Code native CLI
+codex mcp remove wayback                            # Codex CLI native CLI
 ```
 
 ## Quick examples

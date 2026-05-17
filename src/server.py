@@ -4,7 +4,13 @@ import sys
 from mcp.server.fastmcp import FastMCP
 
 from wayback_mcp.config import ia_credentials
-from wayback_mcp.install import auth_setup_guide, install, uninstall
+from wayback_mcp.install import (
+    CLIENTS,
+    auth_setup_guide,
+    install,
+    pick_client_interactively,
+    uninstall,
+)
 from wayback_mcp.models import ToolError
 from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
 from wayback_mcp.tools.content import get_snapshot_content as _get_snapshot_content
@@ -189,16 +195,29 @@ def main() -> None:
         prog="mcp-server-wayback",
         description="MCP server for the Internet Archive's Wayback Machine.",
     )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
+    parser.add_argument(
         "--install",
-        action="store_true",
-        help="Add this server to Claude Desktop's config and exit.",
+        nargs="?",
+        const="<pick>",
+        default=None,
+        metavar="CLIENT",
+        help=(
+            "Add this server to an MCP client's config. Pass a client key (see "
+            "--list-clients), or omit the value to pick interactively."
+        ),
     )
-    group.add_argument(
+    parser.add_argument(
         "--uninstall",
+        nargs="?",
+        const="<pick>",
+        default=None,
+        metavar="CLIENT",
+        help="Remove this server from an MCP client's config. Same arg semantics as --install.",
+    )
+    parser.add_argument(
+        "--list-clients",
         action="store_true",
-        help="Remove this server from Claude Desktop's config and exit.",
+        help="Print the supported client keys for --install / --uninstall and exit.",
     )
     parser.add_argument(
         "--force",
@@ -207,9 +226,40 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.install:
-        sys.exit(install(force=args.force))
-    if args.uninstall:
-        sys.exit(uninstall())
+    if args.list_clients:
+        for c in CLIENTS:
+            print(f"  {c.key:24s}  {c.label}")
+        sys.exit(0)
+
+    if args.install is not None and args.uninstall is not None:
+        parser.error("--install and --uninstall are mutually exclusive")
+
+    if args.install is not None:
+        client_key = args.install
+        if client_key == "<pick>":
+            picked = pick_client_interactively()
+            if picked is None:
+                print(
+                    "Cancelled. Pass a client name to skip the picker, e.g. "
+                    "`--install claude-desktop`. See --list-clients for options.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            client_key = picked.key
+        sys.exit(install(client_key, force=args.force))
+
+    if args.uninstall is not None:
+        client_key = args.uninstall
+        if client_key == "<pick>":
+            picked = pick_client_interactively()
+            if picked is None:
+                print(
+                    "Cancelled. Pass a client name to skip the picker, e.g. "
+                    "`--uninstall claude-desktop`. See --list-clients for options.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            client_key = picked.key
+        sys.exit(uninstall(client_key))
 
     mcp.run(transport="stdio")
