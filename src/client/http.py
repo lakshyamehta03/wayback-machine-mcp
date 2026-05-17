@@ -13,6 +13,7 @@ from wayback_mcp.config import (
 )
 from wayback_mcp.client.cache import ResponseCache
 from wayback_mcp.client.rate_limiter import RateLimiter
+from wayback_mcp.models import ToolError, rate_limited_error
 
 _rate_limiter = RateLimiter(RATE_LIMITS)
 _response_cache = ResponseCache(CACHE_MAX_ENTRIES, CACHE_TTLS)
@@ -22,7 +23,7 @@ async def get(
     url: str,
     rate_key: str,
     params: dict | None = None,
-) -> httpx.Response:
+) -> httpx.Response | ToolError:
     cached = await _response_cache.get(url, params)
     if cached is not None:
         return cached
@@ -65,5 +66,8 @@ async def get(
 
         if last_response is not None and 200 <= last_response.status_code < 300:
             await _response_cache.set(url, params, rate_key, last_response)
+
+        if last_response is not None and last_response.status_code == 429:
+            return rate_limited_error(last_response.headers.get("Retry-After", "5"))
 
         return last_response  # type: ignore[return-value]

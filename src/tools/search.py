@@ -1,7 +1,8 @@
+from wayback_mcp.client.cdx import cdx_query
 from wayback_mcp.client.http import get
-from wayback_mcp.client.parsers import parse_cdx, parse_search_archive
-from wayback_mcp.config import CDX_URL, CDX_MAX_RESULTS, SEARCH_MAX_RESULTS, SEARCH_URL
-from wayback_mcp.models import SearchResult, Snapshot, ToolError, rate_limited_error
+from wayback_mcp.client.parsers import parse_search_archive
+from wayback_mcp.config import CDX_MAX_RESULTS, SEARCH_MAX_RESULTS, SEARCH_URL
+from wayback_mcp.models import SearchResult, Snapshot, ToolError
 
 
 def _build_query(
@@ -36,9 +37,8 @@ async def search_archive(
 
     response = await get(SEARCH_URL, "search", params=params)
 
-    if response.status_code == 429:
-        retry_after = response.headers.get("Retry-After", "5")
-        return rate_limited_error(retry_after)
+    if isinstance(response, ToolError):
+        return response
 
     try:
         raw = response.json()
@@ -60,29 +60,14 @@ async def search_domain(
     limit: int | None = None,
 ) -> list[Snapshot] | ToolError:
     match_type = _match_type(domain)
-    params: dict[str, str] = {
-        "url": f"*.{domain}" if match_type == "domain" else f"{domain}*",
-        "matchType": match_type,
-        "output": "json",
-        "collapse": "urlkey",
-        "limit": str(min(limit, CDX_MAX_RESULTS) if limit else CDX_MAX_RESULTS),
-    }
-    if from_date:
-        params["from"] = from_date
-    if to_date:
-        params["to"] = to_date
-    if status_code:
-        params["filter"] = f"statuscode:{status_code}"
-
-    response = await get(CDX_URL, "cdx", params=params)
-
-    if response.status_code == 429:
-        retry_after = response.headers.get("Retry-After", "5")
-        return rate_limited_error(retry_after)
-
-    try:
-        raw = response.json()
-    except Exception:
-        return []
-
-    return parse_cdx(raw)
+    url_pattern = f"*.{domain}" if match_type == "domain" else f"{domain}*"
+    capped = min(limit, CDX_MAX_RESULTS) if limit else CDX_MAX_RESULTS
+    return await cdx_query(
+        url=url_pattern,
+        match_type=match_type,
+        collapse="urlkey",
+        from_date=from_date,
+        to_date=to_date,
+        status_code=status_code,
+        limit=capped,
+    )

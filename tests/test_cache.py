@@ -7,6 +7,7 @@ import httpx
 from wayback_mcp.client.cache import ResponseCache
 from wayback_mcp.client.http import get, _response_cache
 from wayback_mcp.config import CACHE_TTLS
+from wayback_mcp.models import ToolError
 
 
 @pytest.fixture(autouse=True)
@@ -42,8 +43,8 @@ async def test_429_response_is_not_cached():
         r1 = await get(url, "cdx", params={"url": "bbc.com"})
         r2 = await get(url, "cdx", params={"url": "bbc.com"})
 
-    assert r1.status_code == 429
-    assert r2.status_code == 429
+    assert isinstance(r1, ToolError)
+    assert isinstance(r2, ToolError)
     # Each call retries MAX_RETRIES times; cache must not short-circuit the second call
     assert route.call_count >= 2
 

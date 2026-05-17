@@ -1,9 +1,10 @@
 from typing import List
 
+from wayback_mcp.client.cdx import cdx_query
 from wayback_mcp.client.http import get
-from wayback_mcp.client.parsers import parse_availability, parse_cdx
-from wayback_mcp.config import AVAILABILITY_URL, CDX_MAX_RESULTS, CDX_URL
-from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError, rate_limited_error
+from wayback_mcp.client.parsers import parse_availability
+from wayback_mcp.config import AVAILABILITY_URL
+from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError
 
 
 async def check_availability(
@@ -22,9 +23,8 @@ async def check_availability(
 
     response = await get(AVAILABILITY_URL, "cdx", params=params)
 
-    if response.status_code == 429:
-        retry_after = response.headers.get("Retry-After", "5")
-        return rate_limited_error(retry_after)
+    if isinstance(response, ToolError):
+        return response
 
     try:
         data = response.json()
@@ -41,28 +41,11 @@ async def lookup_snapshots(
     status_code: str | None = None,
     limit: int | None = None,
 ) -> List[Snapshot] | ToolError:
-    params: dict[str, str] = {
-        "url": url,
-        "output": "json",
-        "fl": "timestamp,original,mimetype,statuscode,digest,length",
-        "limit": str(limit if limit is not None else CDX_MAX_RESULTS),
-    }
-    if from_date:
-        params["from"] = from_date
-    if to_date:
-        params["to"] = to_date
-    if status_code:
-        params["filter"] = f"statuscode:{status_code}"
-
-    response = await get(CDX_URL, "cdx", params=params)
-
-    if response.status_code == 429:
-        retry_after = response.headers.get("Retry-After", "5")
-        return rate_limited_error(retry_after)
-
-    try:
-        raw = response.json()
-    except Exception:
-        return []
-
-    return parse_cdx(raw)
+    return await cdx_query(
+        url=url,
+        fields=["timestamp", "original", "mimetype", "statuscode", "digest", "length"],
+        from_date=from_date,
+        to_date=to_date,
+        status_code=status_code,
+        limit=limit,
+    )
