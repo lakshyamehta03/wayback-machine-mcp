@@ -78,6 +78,49 @@ def install(path: Path | None = None, *, force: bool = False) -> int:
     return 0
 
 
+AUTH_CONFIG_SNIPPET = """```json
+{
+  "mcpServers": {
+    "wayback": {
+      "command": "uvx",
+      "args": ["mcp-server-wayback"],
+      "env": {
+        "WAYBACK_MCP_IA_ACCESS_KEY": "<paste access key>",
+        "WAYBACK_MCP_IA_SECRET_KEY": "<paste secret key>"
+      }
+    }
+  }
+}
+```"""
+
+
+def auth_setup_guide() -> str:
+    """Return the full markdown setup guide. Single source of truth shared by the
+    `setup_authentication` prompt and the 429 ToolError hint so they can't drift."""
+    return (
+        "## Setting up Internet Archive API keys\n\n"
+        "Free API keys raise your Internet Archive rate-limit ceiling and remove "
+        "the 429 errors. Keys never leave your machine — they live only in your "
+        "Claude Desktop config and the wayback server subprocess's environment. "
+        "Anthropic never sees them.\n\n"
+        "### Steps\n\n"
+        "**1. Get your keys.** Sign in at archive.org (free account) and visit "
+        "<https://archive.org/account/s3.php>. Copy your access key and secret key.\n\n"
+        "**2. Edit your Claude Desktop config.** The file lives at:\n\n"
+        "- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n"
+        "- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n"
+        "- Linux: `~/.config/Claude/claude_desktop_config.json`\n\n"
+        "Open it in a text editor and replace the `wayback` entry with this exact block "
+        "(paste your real keys where the placeholders are):\n\n"
+        f"{AUTH_CONFIG_SNIPPET}\n\n"
+        "If `mcpServers` already has other servers, just add the `env` block to your "
+        "existing `wayback` entry — don't overwrite the whole file.\n\n"
+        "**3. Restart Claude Desktop.** Fully quit (⌘Q on macOS — closing the window "
+        "isn't enough) and reopen. The server picks up the keys on next launch and "
+        "authenticates every Internet Archive request from then on."
+    )
+
+
 def uninstall(path: Path | None = None) -> int:
     """Remove the wayback entry from Claude Desktop's config. Returns an exit code."""
     config_path = path or claude_desktop_config_path()

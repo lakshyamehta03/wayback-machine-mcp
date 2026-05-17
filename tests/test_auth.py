@@ -101,6 +101,42 @@ async def test_setup_authentication_prompt_renders_configured_state(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_setup_authentication_prompt_instructs_verbatim_relay(monkeypatch):
+    """The prompt must explicitly tell the agent not to summarise the guide —
+    Claude would otherwise rewrite the JSON block as 'the env block above' and
+    the user would never see the actual configuration to paste."""
+    monkeypatch.delenv("WAYBACK_MCP_IA_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("WAYBACK_MCP_IA_SECRET_KEY", raising=False)
+
+    result = await mcp.get_prompt("setup_authentication", arguments={})
+    text = result.messages[0].content.text.lower()
+
+    assert "verbatim" in text or "exactly as written" in text
+    assert "do not summarise" in text or "do not summarize" in text
+
+
+@pytest.mark.asyncio
+async def test_429_error_inlines_json_snippet_when_unconfigured(monkeypatch):
+    """The 429 error string must carry the actual config block, not just a
+    reference to it. Even if the agent summarises the surrounding prose, the
+    JSON survives so the user can paste it."""
+    monkeypatch.delenv("WAYBACK_MCP_IA_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("WAYBACK_MCP_IA_SECRET_KEY", raising=False)
+
+    with respx.mock:
+        respx.get(CDX_URL).mock(
+            return_value=httpx.Response(429, headers={"Retry-After": "30"})
+        )
+        result = await lookup_snapshots("bbc.com")
+
+    assert isinstance(result, ToolError)
+    assert "WAYBACK_MCP_IA_ACCESS_KEY" in result.error
+    assert "WAYBACK_MCP_IA_SECRET_KEY" in result.error
+    assert '"mcpServers"' in result.error
+    assert "```json" in result.error
+
+
+@pytest.mark.asyncio
 async def test_429_error_includes_auth_hint_when_unconfigured(monkeypatch):
     monkeypatch.delenv("WAYBACK_MCP_IA_ACCESS_KEY", raising=False)
     monkeypatch.delenv("WAYBACK_MCP_IA_SECRET_KEY", raising=False)

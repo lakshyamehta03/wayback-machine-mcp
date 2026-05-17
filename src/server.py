@@ -4,7 +4,7 @@ import sys
 from mcp.server.fastmcp import FastMCP
 
 from wayback_mcp.config import ia_credentials
-from wayback_mcp.install import install, uninstall
+from wayback_mcp.install import auth_setup_guide, install, uninstall
 from wayback_mcp.models import ToolError
 from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
 from wayback_mcp.tools.content import get_snapshot_content as _get_snapshot_content
@@ -157,38 +157,21 @@ def setup_authentication() -> str:
     """Walk the user through configuring Internet Archive API keys for higher rate limits."""
     if ia_credentials() is not None:
         return (
-            "✓ Authentication credentials detected.\n\n"
-            "WAYBACK_MCP_IA_ACCESS_KEY and WAYBACK_MCP_IA_SECRET_KEY are both set "
-            "in the server's environment, so every outbound Internet Archive request "
-            "is authenticated and benefits from the higher rate-limit ceiling. "
-            "No further action needed."
+            "The user already has Internet Archive credentials configured. Tell them "
+            "verbatim:\n\n"
+            "> ✓ Authentication credentials detected. `WAYBACK_MCP_IA_ACCESS_KEY` and "
+            "`WAYBACK_MCP_IA_SECRET_KEY` are both set in the server's environment, so "
+            "every outbound Internet Archive request is authenticated and benefits from "
+            "the higher rate-limit ceiling. No further action needed."
         )
     return (
-        "Internet Archive supports free API keys that raise your rate-limit ceiling. "
-        "Configuring them removes the 429 errors you've been seeing.\n\n"
-        "Steps:\n\n"
-        "1. Sign in to your archive.org account (free to create) and visit "
-        "https://archive.org/account/s3.php — copy your access key and secret key.\n\n"
-        "2. Open your `claude_desktop_config.json` "
-        "(on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`). "
-        "Add an `\"env\"` block to the wayback server entry:\n\n"
-        "```json\n"
-        "{\n"
-        '  \"mcpServers\": {\n'
-        '    \"wayback\": {\n'
-        '      \"command\": \"mcp-server-wayback\",\n'
-        '      \"env\": {\n'
-        '        \"WAYBACK_MCP_IA_ACCESS_KEY\": \"<paste access key>\",\n'
-        '        \"WAYBACK_MCP_IA_SECRET_KEY\": \"<paste secret key>\"\n'
-        "      }\n"
-        "    }\n"
-        "  }\n"
-        "}\n"
-        "```\n\n"
-        "3. Restart Claude Desktop. The server will pick up the keys "
-        "and authenticate every Internet Archive request from now on.\n\n"
-        "Your keys never leave your machine — they live only in this config file "
-        "and the server subprocess's environment. Anthropic never sees them."
+        "The user needs to configure Internet Archive API keys. Your job is to "
+        "show them the guide below **exactly as written**, including the JSON code "
+        "block and every URL. Do not summarise, paraphrase, or omit the code block — "
+        "the user needs to paste it. After displaying the guide, optionally offer to "
+        "answer follow-up questions, but do not skip any part of the guide itself.\n\n"
+        "---\n\n"
+        f"{auth_setup_guide()}"
     )
 
 
