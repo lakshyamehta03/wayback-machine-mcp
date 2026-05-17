@@ -30,35 +30,9 @@
 - **Structured error model** — expected failures return `ToolError`; unexpected ones raise
 - **Tested against live IA APIs** via an opt-in `--integration` pytest flag
 
-## Installation
+## Quick start
 
-Requires Python 3.11+.
-
-```bash
-pip install mcp-server-wayback
-```
-
-> _Once published to PyPI._ Until then, see [Development](#development) for the from-source workflow.
-
-## Usage
-
-### Wire it into Claude Desktop
-
-Add an entry to `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "wayback": {
-      "command": "mcp-server-wayback"
-    }
-  }
-}
-```
-
-Restart Claude Desktop. The `wayback` tools, prompts, and resources will appear in the MCP picker.
-
-If you prefer not to install globally, run it on demand with [`uvx`](https://github.com/astral-sh/uv):
+Add this to your `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -66,6 +40,28 @@ If you prefer not to install globally, run it on demand with [`uvx`](https://git
     "wayback": {
       "command": "uvx",
       "args": ["mcp-server-wayback"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. That's it — `uvx` fetches the package on first run, no install step needed. The `wayback` tools, prompts, and resources will appear in the MCP picker.
+
+> Need [`uvx`](https://docs.astral.sh/uv/getting-started/installation/)? `brew install uv` on macOS, or `pipx install uv`. Python 3.11+ required.
+
+### Alternative: install globally with pip
+
+```bash
+pip install mcp-server-wayback
+```
+
+Then point Claude Desktop at the installed script:
+
+```json
+{
+  "mcpServers": {
+    "wayback": {
+      "command": "mcp-server-wayback"
     }
   }
 }
