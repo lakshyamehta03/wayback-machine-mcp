@@ -18,8 +18,19 @@ RATE_LIMITS: dict[str, float] = {
     "content": 2.0,
 }
 
-REQUEST_TIMEOUT = 30.0  # seconds
+REQUEST_TIMEOUT = 30.0  # seconds — default for content fetches
+# Lightweight API endpoints (CDX, availability, search, metadata) should fail
+# fast so a slow/hanging IA server doesn't stall the event loop for minutes.
+REQUEST_TIMEOUTS: dict[str, float] = {
+    "cdx": 10.0,
+    "search": 10.0,
+    "metadata": 10.0,
+    "content": 30.0,
+}
 MAX_RETRIES = 3
+# Cap concurrent in-flight HTTP requests to IA. An agent can fire many parallel
+# tool calls at once; without this cap we'd self-trigger cascading 429s.
+MAX_CONCURRENT_REQUESTS = 4
 
 CDX_MAX_RESULTS = 50
 SEARCH_MAX_RESULTS = 50

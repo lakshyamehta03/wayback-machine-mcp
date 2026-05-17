@@ -5,9 +5,11 @@ import httpx
 from wayback_mcp.config import (
     CACHE_MAX_ENTRIES,
     CACHE_TTLS,
+    MAX_CONCURRENT_REQUESTS,
     MAX_RETRIES,
     RATE_LIMITS,
     REQUEST_TIMEOUT,
+    REQUEST_TIMEOUTS,
     USER_AGENT,
     ia_credentials,
 )
@@ -17,6 +19,7 @@ from wayback_mcp.models import ToolError, rate_limited_error
 
 _rate_limiter = RateLimiter(RATE_LIMITS)
 _response_cache = ResponseCache(CACHE_MAX_ENTRIES, CACHE_TTLS)
+_request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 
 async def get(
@@ -36,26 +39,45 @@ async def get(
         access, secret = creds
         headers["Authorization"] = f"LOW {access}:{secret}"
 
+    timeout = REQUEST_TIMEOUTS.get(rate_key, REQUEST_TIMEOUT)
+
     async with httpx.AsyncClient(
         headers=headers,
-        timeout=REQUEST_TIMEOUT,
+        timeout=timeout,
         follow_redirects=True,
     ) as client:
         last_response: httpx.Response | None = None
 
         for attempt in range(MAX_RETRIES):
-            response = await client.get(url, params=params)
+            request_error: httpx.RequestError | None = None
+            async with _request_semaphore:
+                try:
+                    response = await client.get(url, params=params)
+                except httpx.RequestError as exc:
+                    request_error = exc
+
+            if request_error is not None:
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+                if isinstance(request_error, httpx.TimeoutException):
+                    return ToolError(error=f"Request to the Wayback Machine timed out after {timeout}s.")
+                return ToolError(
+                    error=f"Request to the Wayback Machine failed: {type(request_error).__name__}."
+                )
+
             last_response = response
 
             if response.status_code == 429:
                 retry_after_raw = response.headers.get("Retry-After", "5")
                 retry_after = float(retry_after_raw)
-                _rate_limiter.set_retry_after(rate_key, retry_after)
                 # Ensure callers can always read the effective Retry-After
                 response.headers["Retry-After"] = retry_after_raw
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(retry_after)
                     continue
+                # Retries exhausted — record cooldown for the next top-level call
+                _rate_limiter.set_retry_after(rate_key, retry_after)
                 break
 
             if response.status_code >= 500 and attempt < MAX_RETRIES - 1:
