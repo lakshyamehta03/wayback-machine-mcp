@@ -40,12 +40,48 @@ async def lookup_snapshots(
     to_date: str | None = None,
     status_code: str | None = None,
     limit: int | None = None,
+    collapse: str | None = None,
+    latest: bool = False,
 ) -> List[Snapshot] | ToolError:
+    """Return CDX snapshots for a URL.
+
+    `collapse` controls per-row deduplication on the CDX side:
+      - None (default) → "timestamp:8" (one capture per day, the most useful
+        agent default — popular URLs otherwise return one row per crawler hit)
+      - "digest" → only captures whose content changed
+      - "" (empty string) → no collapsing, return every capture
+      - any other CDX collapse spec is passed through
+
+    `latest=True` uses CDX's fastLatest path to return the N most recent
+    captures cheaply. Cannot be combined with `from_date`/`to_date`.
+    """
+    if latest and (from_date or to_date):
+        return ToolError(
+            error="'latest' cannot be combined with from_date/to_date filters."
+        )
+
+    effective_collapse: str | None
+    if collapse is None:
+        effective_collapse = "timestamp:8"
+    elif collapse == "":
+        effective_collapse = None
+    else:
+        effective_collapse = collapse
+
+    effective_limit = limit
+    if latest:
+        # CDX semantics: limit=-N → the N most recent captures (paired with
+        # fastLatest=true). Default to 5 when caller didn't specify.
+        n = abs(limit) if limit is not None else 5
+        effective_limit = -n
+
     return await cdx_query(
         url=url,
         fields=["timestamp", "original", "mimetype", "statuscode", "digest", "length"],
         from_date=from_date,
         to_date=to_date,
         status_code=status_code,
-        limit=limit,
+        limit=effective_limit,
+        collapse=effective_collapse,
+        fast_latest=latest,
     )

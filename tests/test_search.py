@@ -94,6 +94,23 @@ async def test_search_domain_bare_domain_sends_matchtype_domain():
     assert "matchType=domain" in str(request.url)
 
 
+@pytest.mark.asyncio
+async def test_search_domain_bare_domain_sends_host_without_glob_prefix():
+    # Regression: a "*." prefix on a matchType=domain query forces the URL key
+    # to contain a subdomain segment, which excludes captures of the bare host.
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(
+            return_value=httpx.Response(200, json=CDX_DOMAIN_RESPONSE)
+        )
+        await search_domain("example.com")
+
+    request = route.calls.last.request
+    qs = str(request.url)
+    assert "url=example.com" in qs
+    assert "url=%2A.example.com" not in qs
+    assert "url=*.example.com" not in qs
+
+
 # ── Cycle 4: status-code filter ──────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -111,14 +128,16 @@ async def test_search_domain_status_code_filter_forwarded():
 # ── Cycle 5: empty range / JSONDecodeError returns [] ────────────────────────
 
 @pytest.mark.asyncio
-async def test_search_domain_json_decode_error_returns_empty_list():
+async def test_search_domain_non_json_response_returns_tool_error():
     with respx.mock:
         respx.get(CDX_URL).mock(
             return_value=httpx.Response(200, content=b"no results for this date range")
         )
         result = await search_domain("example.com", from_date="20000101", to_date="20000102")
 
-    assert result == []
+    assert isinstance(result, ToolError)
+    assert "malformed response" in result.error
+    assert "no results for this date range" in result.error
 
 
 @pytest.mark.asyncio
@@ -353,7 +372,7 @@ async def test_search_archive_zero_results_returns_empty_list():
 # ── Cycle 9: non-JSON / malformed response ────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_search_archive_non_json_returns_empty_list():
+async def test_search_archive_non_json_returns_tool_error():
     from wayback_mcp.tools.search import search_archive
 
     with respx.mock:
@@ -362,7 +381,9 @@ async def test_search_archive_non_json_returns_empty_list():
         )
         result = await search_archive("bad lucene query ::::")
 
-    assert result == []
+    assert isinstance(result, ToolError)
+    assert "malformed response" in result.error
+    assert "not json" in result.error
 
 
 # ── Cycle 10: request hits SEARCH_URL ────────────────────────────────────────

@@ -54,7 +54,10 @@ def _normalize_str_or_list(value) -> list | None:
 def parse_item_metadata(data: dict) -> ItemMetadata:
     meta = data.get("metadata", {})
     item = data.get("item") or {}
-    files = data.get("files_sample") or []
+    # IA's metadata response normally carries the full file list under "files".
+    # Some older or specialised items use "files_sample" instead. Prefer the
+    # full list when present, fall back to the sample, default to empty.
+    files = data.get("files") or data.get("files_sample") or []
 
     return ItemMetadata(
         identifier=meta["identifier"],

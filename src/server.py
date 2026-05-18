@@ -44,9 +44,23 @@ async def lookup_snapshots(
     to_date: str | None = None,
     status_code: str | None = None,
     limit: int | None = None,
+    collapse: str | None = None,
+    latest: bool = False,
 ) -> list:
-    """Return all CDX snapshots for a URL, with optional date range and status-code filter."""
-    result = await _lookup_snapshots(url, from_date, to_date, status_code, limit)
+    """Return CDX snapshots for a URL, with optional date range and status-code filter.
+
+    The Wayback Machine often crawls the same URL many times per day; raw CDX results would return one row per crawl. `collapse` is a server-side de-duplication: adjacent rows that share the same value in the chosen field get folded into a single representative row.
+
+    By default we collapse on the first 8 digits of the timestamp (`"timestamp:8"`), which is the YYYYMMDD prefix — i.e. **one row per day**. This is almost always what you want for "show me snapshots of this URL"; otherwise the default limit of 50 gets eaten by 50 captures from a single hour and you see nothing about the URL's history.
+
+    Override `collapse` when you need different granularity:
+    - `"digest"` — collapse on content hash, so you only see captures where the page actually *changed*
+    - `"timestamp:10"` — one row per hour (first 10 digits of timestamp)
+    - `""` (empty string) — disable collapsing entirely; return every capture
+    - any other CDX collapse spec is passed through verbatim
+
+    `latest=True` uses CDX's fastLatest path to return the N most recent captures cheaply (much faster than a full scan over the index). Cannot be combined with `from_date`/`to_date`."""
+    result = await _lookup_snapshots(url, from_date, to_date, status_code, limit, collapse, latest)
     if hasattr(result, "model_dump"):
         return [result.model_dump()]
     return [s.model_dump() for s in result]
@@ -60,7 +74,17 @@ async def search_archive(
     year_to: int | None = None,
     limit: int | None = None,
 ) -> list[dict] | dict:
-    """Search Internet Archive collections using Lucene query syntax. Supports mediatype and year range filters."""
+    """Search Internet Archive *collections* (uploaded books, audio, video, software items) using Lucene query syntax.
+
+    This is NOT a search over the Wayback Machine web crawl. It only returns items that someone has uploaded to archive.org as a discrete media item.
+
+    Do NOT use this for:
+    - Current news, journalism, or recent events
+    - Government circulars, press releases, or official web pages
+    - Wikipedia articles or any live web content
+    - "What was on this website" / "what URLs are archived" — use `search_domain` or `lookup_snapshots` for those.
+
+    Good uses: historical books, lecture recordings, archived films, software releases, podcast episodes, scanned magazines. Use Lucene fields when possible (e.g. `subject:"civil war"`, `creator:"NASA"`, `collection:librivoxaudio`)."""
     result = await _search_archive(query, mediatype, year_from, year_to, limit)
     if hasattr(result, "model_dump"):
         return result.model_dump()

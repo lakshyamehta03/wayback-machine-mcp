@@ -122,14 +122,16 @@ async def test_lookup_snapshots_header_only_returns_empty_list():
 
 
 @pytest.mark.asyncio
-async def test_lookup_snapshots_empty_range_returns_empty_list():
+async def test_lookup_snapshots_non_json_response_returns_tool_error():
     with respx.mock:
         respx.get(CDX_URL).mock(
             return_value=httpx.Response(200, content=b"no results for this date range")
         )
         result = await lookup_snapshots("bbc.com", from_date="20300101", to_date="20300102")
 
-    assert result == []
+    assert isinstance(result, ToolError)
+    assert "malformed response" in result.error
+    assert "no results for this date range" in result.error
 
 
 @pytest.mark.asyncio
@@ -152,3 +154,68 @@ async def test_check_availability_malformed_response():
 
     assert isinstance(result, ToolError)
     assert result.error is not None
+
+
+# ── #27: collapse default + latest/fastLatest ────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_lookup_snapshots_sends_default_collapse_timestamp_8():
+    """Without `collapse` argument, the default per-day collapse is sent so
+    popular URLs don't return one row per crawler hit."""
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_MULTI_ROW))
+        await lookup_snapshots("bbc.com")
+
+    qs = str(route.calls.last.request.url)
+    assert "collapse=timestamp%3A8" in qs or "collapse=timestamp:8" in qs
+
+
+@pytest.mark.asyncio
+async def test_lookup_snapshots_explicit_collapse_overrides_default():
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_MULTI_ROW))
+        await lookup_snapshots("bbc.com", collapse="digest")
+
+    qs = str(route.calls.last.request.url)
+    assert "collapse=digest" in qs
+    assert "timestamp" not in qs.split("collapse=")[1].split("&")[0]
+
+
+@pytest.mark.asyncio
+async def test_lookup_snapshots_empty_collapse_disables_collapsing():
+    """`collapse=""` is the explicit opt-out — sends no collapse param at all."""
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_MULTI_ROW))
+        await lookup_snapshots("bbc.com", collapse="")
+
+    qs = str(route.calls.last.request.url)
+    assert "collapse=" not in qs
+
+
+@pytest.mark.asyncio
+async def test_lookup_snapshots_latest_sends_fastlatest_and_negative_limit():
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_MULTI_ROW))
+        await lookup_snapshots("bbc.com", latest=True, limit=3)
+
+    qs = str(route.calls.last.request.url)
+    assert "fastLatest=true" in qs
+    assert "limit=-3" in qs
+
+
+@pytest.mark.asyncio
+async def test_lookup_snapshots_latest_with_date_filter_returns_error():
+    result = await lookup_snapshots("bbc.com", latest=True, from_date="20200101")
+    assert isinstance(result, ToolError)
+    assert "latest" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_lookup_snapshots_latest_defaults_to_5_when_no_limit():
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_MULTI_ROW))
+        await lookup_snapshots("bbc.com", latest=True)
+
+    qs = str(route.calls.last.request.url)
+    assert "limit=-5" in qs
+    assert "fastLatest=true" in qs

@@ -64,3 +64,40 @@ async def test_rate_limiter_clears_retry_after_after_use():
         await limiter.acquire("cdx")
 
     mock_sleep.assert_not_called()
+
+
+# ── #25: parse_item_metadata prefers "files" over "files_sample" ─────────────
+
+from wayback_mcp.client.parsers import parse_item_metadata
+
+
+def test_parse_item_metadata_prefers_files_over_files_sample():
+    """IA's metadata response normally carries the full file list under
+    'files'. Without this preference, items return file_count=0 even when
+    the response actually contains files."""
+    data = {
+        "metadata": {"identifier": "test-item", "title": "Test"},
+        "files": [{"name": "a.pdf"}, {"name": "b.pdf"}, {"name": "c.pdf"}],
+        "files_sample": [],
+    }
+    meta = parse_item_metadata(data)
+    assert meta.file_count == 3
+    assert len(meta.files) == 3
+
+
+def test_parse_item_metadata_falls_back_to_files_sample():
+    """Older or specialised items may have only files_sample. Backward
+    compatible — the parser must still find them."""
+    data = {
+        "metadata": {"identifier": "test-item"},
+        "files_sample": [{"name": "x.txt"}, {"name": "y.txt"}],
+    }
+    meta = parse_item_metadata(data)
+    assert meta.file_count == 2
+
+
+def test_parse_item_metadata_empty_when_neither_field_present():
+    data = {"metadata": {"identifier": "test-item"}}
+    meta = parse_item_metadata(data)
+    assert meta.file_count == 0
+    assert meta.files == []

@@ -16,12 +16,15 @@ async def cdx_query(
     to_date: str | None = None,
     status_code: str | None = None,
     limit: int | None = None,
+    fast_latest: bool = False,
 ) -> List[Snapshot] | ToolError:
     params: dict[str, str] = {
         "url": url,
         "output": "json",
         "limit": str(limit if limit is not None else CDX_MAX_RESULTS),
     }
+    if fast_latest:
+        params["fastLatest"] = "true"
     if fields:
         params["fl"] = ",".join(fields)
     if match_type:
@@ -43,6 +46,9 @@ async def cdx_query(
     try:
         raw = response.json()
     except Exception:
-        return []
+        snippet = response.text[:200].replace("\n", " ")
+        return ToolError(
+            error=f"CDX returned a malformed response (status={response.status_code}): {snippet}"
+        )
 
     return parse_cdx(raw)

@@ -24,7 +24,9 @@ def _clear_cache():
 
 
 @pytest.mark.asyncio
-async def test_authorization_header_sent_when_both_env_vars_set(monkeypatch):
+async def test_authorization_header_sent_to_non_cdx_endpoints(monkeypatch):
+    """Availability/metadata/search are IA S3-style endpoints and want the
+    LOW Authorization header. The CDX server is different — covered separately."""
     monkeypatch.setenv("WAYBACK_MCP_IA_ACCESS_KEY", "ACCESS123")
     monkeypatch.setenv("WAYBACK_MCP_IA_SECRET_KEY", "SECRET456")
 
@@ -34,8 +36,44 @@ async def test_authorization_header_sent_when_both_env_vars_set(monkeypatch):
         await get(url, "cdx", params={"url": "bbc.com"})
 
     assert route.call_count == 1
-    auth = route.calls[0].request.headers.get("Authorization")
-    assert auth == "LOW ACCESS123:SECRET456"
+    req = route.calls[0].request
+    assert req.headers.get("Authorization") == "LOW ACCESS123:SECRET456"
+    # Must not also send the CDX-specific cookie to non-CDX hosts.
+    assert "cdx-auth-token" not in req.headers.get("Cookie", "")
+
+
+@pytest.mark.asyncio
+async def test_cdx_endpoint_uses_cookie_auth_not_authorization(monkeypatch):
+    """The CDX server routes authenticated traffic differently (verified to
+    materially raise success rate, see #26). Cookie XOR Authorization — never
+    both on the same request."""
+    monkeypatch.setenv("WAYBACK_MCP_IA_ACCESS_KEY", "ACCESS123")
+    monkeypatch.setenv("WAYBACK_MCP_IA_SECRET_KEY", "SECRET456")
+
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=[]))
+        await get(CDX_URL, "cdx", params={"url": "bbc.com", "output": "json"})
+
+    assert route.call_count == 1
+    req = route.calls[0].request
+    cookie_header = req.headers.get("Cookie", "")
+    assert "cdx-auth-token=ACCESS123-SECRET456" in cookie_header
+    # Sending both would let IA pick whichever it sees first — keep it unambiguous.
+    assert req.headers.get("Authorization") is None
+
+
+@pytest.mark.asyncio
+async def test_cdx_endpoint_sends_no_cookie_when_creds_missing(monkeypatch):
+    monkeypatch.delenv("WAYBACK_MCP_IA_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("WAYBACK_MCP_IA_SECRET_KEY", raising=False)
+
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=[]))
+        await get(CDX_URL, "cdx", params={"url": "bbc.com", "output": "json"})
+
+    req = route.calls[0].request
+    assert "cdx-auth-token" not in req.headers.get("Cookie", "")
+    assert req.headers.get("Authorization") is None
 
 
 @pytest.mark.parametrize(

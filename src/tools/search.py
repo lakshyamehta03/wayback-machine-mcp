@@ -43,7 +43,10 @@ async def search_archive(
     try:
         raw = response.json()
     except Exception:
-        return []
+        snippet = response.text[:200].replace("\n", " ")
+        return ToolError(
+            error=f"archive.org search returned a malformed response (status={response.status_code}): {snippet}"
+        )
 
     return parse_search_archive(raw)
 
@@ -60,7 +63,10 @@ async def search_domain(
     limit: int | None = None,
 ) -> list[Snapshot] | ToolError:
     match_type = _match_type(domain)
-    url_pattern = f"*.{domain}" if match_type == "domain" else f"{domain}*"
+    # matchType=domain expands to all subdomains server-side, so pass the bare
+    # host. Adding a "*." prefix would force a subdomain segment into the URL
+    # key and exclude captures of the bare host itself.
+    url_pattern = domain if match_type == "domain" else f"{domain}*"
     capped = min(limit, CDX_MAX_RESULTS) if limit else CDX_MAX_RESULTS
     return await cdx_query(
         url=url_pattern,
