@@ -171,6 +171,71 @@ def _load_config(path: Path) -> dict:
     return json.loads(text)
 
 
+# Script name we ship as a console entry point. Used to identify wayback
+# entries by their invocation, not by the user's chosen config-key name.
+_SCRIPT_NAME = "mcp-server-wayback"
+
+
+def _matches_server_entry(entry: object) -> bool:
+    """True if `entry` looks like an invocation of this server.
+
+    Matches:
+      - direct: command == "mcp-server-wayback"
+      - uvx: command == "uvx" and "mcp-server-wayback" in args
+      - uv run: command == "uv" and "mcp-server-wayback" in args
+        (covers `uv run mcp-server-wayback` from a local-dev checkout)
+
+    Matches on the exact script name, never a substring, to avoid false
+    positives like "my-mcp-server-wayback-fork".
+    """
+    if not isinstance(entry, dict):
+        return False
+    cmd = entry.get("command")
+    if cmd == _SCRIPT_NAME:
+        return True
+    if cmd in ("uvx", "uv"):
+        args = entry.get("args") or []
+        if isinstance(args, list) and _SCRIPT_NAME in args:
+            return True
+    return False
+
+
+def _find_server_entries(servers: dict) -> list[str]:
+    """Return all keys in `servers` whose entry looks like our server,
+    regardless of the user's chosen key name."""
+    if not isinstance(servers, dict):
+        return []
+    return [k for k, v in servers.items() if _matches_server_entry(v)]
+
+
+def _resolve_target_key(servers: dict, config_path: Path, client_key: str) -> str | None:
+    """Pick the single key to mutate for set/clear-auth operations.
+
+    Prefers the canonical `wayback` key when present; otherwise uses the sole
+    matching entry. Returns None and prints a user-facing error if no entry is
+    found or if multiple non-default matches are ambiguous.
+    """
+    if SERVER_KEY in servers:
+        return SERVER_KEY
+    matches = _find_server_entries(servers)
+    if not matches:
+        print(
+            f"error: wayback isn't in {config_path}.\n"
+            f"Run `mcp-server-wayback --install {client_key}` first.",
+            file=sys.stderr,
+        )
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    print(
+        f"error: multiple wayback server entries found in {config_path}: "
+        f"{', '.join(matches)}.\n"
+        f"Rename one to '{SERVER_KEY}' or remove the duplicates first.",
+        file=sys.stderr,
+    )
+    return None
+
+
 def install(
     client_key: str = "claude-desktop",
     *,
@@ -231,8 +296,18 @@ def uninstall(
     client_key: str = "claude-desktop",
     *,
     path: Path | None = None,
+    force: bool = False,
+    stream_in=None,
+    stream_out=None,
 ) -> int:
-    """Remove the wayback entry from the chosen client's config. Returns an exit code."""
+    """Remove the wayback entry from the chosen client's config. Returns an exit code.
+
+    Matches entries by their invocation (see `_matches_server_entry`), not just
+    by the hardcoded `wayback` key — so a user who installed manually under a
+    different key name (e.g. `wayback-mcp`) is still covered. When matches are
+    found under non-default keys, prompts for confirmation before removing
+    unless `force=True`.
+    """
     client = get_client(client_key)
     if client is None:
         print(
@@ -254,16 +329,45 @@ def uninstall(
         return 1
 
     servers = config.get(client.container_key, {})
-    if SERVER_KEY not in servers:
+    matches = _find_server_entries(servers)
+    # Also remove the canonical key if it exists but its entry shape doesn't
+    # match (e.g. legacy/corrupt entry under "wayback") — preserves prior
+    # behavior of always cleaning out the default key on uninstall.
+    if SERVER_KEY in servers and SERVER_KEY not in matches:
+        matches.append(SERVER_KEY)
+
+    if not matches:
         print(f"wayback isn't in {config_path} — nothing to remove.")
         return 0
 
-    del servers[SERVER_KEY]
+    non_default = [k for k in matches if k != SERVER_KEY]
+    if non_default and not force:
+        stream_in = stream_in or sys.stdin
+        stream_out = stream_out or sys.stdout
+        print(
+            f"Found wayback server entries under non-default keys in {config_path}:",
+            file=stream_out,
+        )
+        for k in non_default:
+            print(f"  - {k}", file=stream_out)
+        print("Remove these too? [y/N]: ", end="", file=stream_out, flush=True)
+        answer = stream_in.readline().strip().lower()
+        if answer not in ("y", "yes"):
+            print("Cancelled. Re-run with --force to skip this prompt.", file=stream_out)
+            # If the default key was also matched, still remove it — that's the
+            # "old" --uninstall behavior the user explicitly invoked.
+            if SERVER_KEY not in matches:
+                return 0
+            matches = [SERVER_KEY]
+
+    for key in matches:
+        servers.pop(key, None)
     if not servers:
         del config[client.container_key]
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
-    print(f"✓ Removed wayback from {config_path.resolve()}")
+    removed_desc = ", ".join(matches)
+    print(f"✓ Removed wayback ({removed_desc}) from {config_path.resolve()}")
     print(f"Restart {client.label} for the change to take effect.")
     return 0
 
@@ -326,12 +430,8 @@ def set_auth(
         return 1
 
     servers = config.get(client.container_key, {})
-    if SERVER_KEY not in servers:
-        print(
-            f"error: wayback isn't in {config_path}.\n"
-            f"Run `mcp-server-wayback --install {client.key}` first.",
-            file=sys.stderr,
-        )
+    target_key = _resolve_target_key(servers, config_path, client.key)
+    if target_key is None:
         return 1
 
     if access_key is None:
@@ -349,7 +449,7 @@ def set_auth(
         print("error: secret key is required.", file=sys.stderr)
         return 1
 
-    entry = servers[SERVER_KEY]
+    entry = servers[target_key]
     env = entry.setdefault("env", {})
     env[ACCESS_KEY_ENV] = access_key
     env[SECRET_KEY_ENV] = secret_key
@@ -392,11 +492,26 @@ def clear_auth(
         return 1
 
     servers = config.get(client.container_key, {})
-    if SERVER_KEY not in servers:
+    matches = _find_server_entries(servers)
+    if SERVER_KEY in servers and SERVER_KEY not in matches:
+        matches.append(SERVER_KEY)
+    if not matches:
         print(f"wayback isn't in {config_path} — nothing to clear.")
         return 0
+    if SERVER_KEY in matches:
+        target_key = SERVER_KEY
+    elif len(matches) == 1:
+        target_key = matches[0]
+    else:
+        print(
+            f"error: multiple wayback server entries found in {config_path}: "
+            f"{', '.join(matches)}.\n"
+            f"Rename one to '{SERVER_KEY}' or remove the duplicates first.",
+            file=sys.stderr,
+        )
+        return 1
 
-    entry = servers[SERVER_KEY]
+    entry = servers[target_key]
     env = entry.get("env", {})
     removed = False
     for key in (ACCESS_KEY_ENV, SECRET_KEY_ENV):

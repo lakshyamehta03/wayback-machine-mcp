@@ -442,3 +442,308 @@ def test_install_prints_set_auth_hint_when_no_keys(
     out = capsys.readouterr().out
     assert "--set-auth" in out
     assert "archive.org/account/s3.php" in out
+
+
+# ---------------------------------------------------------------------------
+# Matching wayback entries by command, not by key name (issue #22)
+# ---------------------------------------------------------------------------
+
+
+def test_uninstall_removes_uvx_entry_under_custom_key(tmp_path: Path) -> None:
+    """A user who installed manually under e.g. `wayback-mcp` should still be
+    cleanable via --uninstall --force, since the entry's `command`/`args`
+    identifies it as our server."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                    "other": {"command": "x"},
+                }
+            }
+        )
+    )
+
+    rc = uninstall("claude-code-user", path=cfg, force=True)
+
+    assert rc == 0
+    data = _read(cfg)
+    assert "wayback-mcp" not in data["mcpServers"]
+    assert data["mcpServers"]["other"] == {"command": "x"}
+
+
+def test_uninstall_removes_direct_command_entry(tmp_path: Path) -> None:
+    """An entry whose command IS `mcp-server-wayback` directly (no uvx wrapper)
+    should also be matched."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "my-wayback": {"command": "mcp-server-wayback", "args": []},
+                }
+            }
+        )
+    )
+
+    rc = uninstall("claude-code-user", path=cfg, force=True)
+
+    assert rc == 0
+    assert "mcpServers" not in _read(cfg)
+
+
+def test_uninstall_removes_uv_run_local_dev_entry(tmp_path: Path) -> None:
+    """`uv run mcp-server-wayback` from a local checkout should match too."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-dev": {"command": "uv", "args": ["run", "mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    rc = uninstall("claude-code-user", path=cfg, force=True)
+
+    assert rc == 0
+    assert "mcpServers" not in _read(cfg)
+
+
+def test_uninstall_does_not_match_unrelated_uvx_entry(tmp_path: Path) -> None:
+    """A `uvx some-other-server` entry must not be mistaken for ours."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "other": {"command": "uvx", "args": ["mcp-server-other"]},
+                }
+            }
+        )
+    )
+
+    rc = uninstall("claude-code-user", path=cfg, force=True)
+
+    assert rc == 0
+    assert _read(cfg)["mcpServers"]["other"]["command"] == "uvx"
+
+
+def test_uninstall_prompts_for_confirmation_on_non_default_key(
+    tmp_path: Path,
+) -> None:
+    """Without --force, removing an entry under a non-default key should
+    require explicit confirmation."""
+    from io import StringIO
+
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    stream_in = StringIO("n\n")
+    stream_out = StringIO()
+    rc = uninstall(
+        "claude-code-user", path=cfg, stream_in=stream_in, stream_out=stream_out
+    )
+
+    assert rc == 0
+    assert "wayback-mcp" in _read(cfg)["mcpServers"]  # not removed
+    assert "wayback-mcp" in stream_out.getvalue()
+    assert "Cancelled" in stream_out.getvalue()
+
+
+def test_uninstall_confirmation_yes_removes_entry(tmp_path: Path) -> None:
+    from io import StringIO
+
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    stream_in = StringIO("y\n")
+    stream_out = StringIO()
+    rc = uninstall(
+        "claude-code-user", path=cfg, stream_in=stream_in, stream_out=stream_out
+    )
+
+    assert rc == 0
+    assert "mcpServers" not in _read(cfg)
+
+
+def test_uninstall_force_skips_confirmation(tmp_path: Path) -> None:
+    """--force should remove non-default-key entries without prompting."""
+    from io import StringIO
+
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    # Empty stream_in proves we never read from it.
+    stream_in = StringIO("")
+    stream_out = StringIO()
+    rc = uninstall(
+        "claude-code-user",
+        path=cfg,
+        force=True,
+        stream_in=stream_in,
+        stream_out=stream_out,
+    )
+
+    assert rc == 0
+    assert "mcpServers" not in _read(cfg)
+
+
+def test_uninstall_default_key_still_works_without_prompt(tmp_path: Path) -> None:
+    """The canonical `wayback` key must continue to uninstall silently —
+    no confirmation prompt was needed before, none should be now."""
+    from io import StringIO
+
+    cfg = tmp_path / "claude.json"
+    install("claude-code-user", path=cfg)
+
+    stream_in = StringIO("")  # no input available — would hang if prompted
+    stream_out = StringIO()
+    rc = uninstall(
+        "claude-code-user", path=cfg, stream_in=stream_in, stream_out=stream_out
+    )
+
+    assert rc == 0
+    assert "mcpServers" not in _read(cfg)
+
+
+def test_uninstall_removes_both_default_and_custom_keys(tmp_path: Path) -> None:
+    """If both the canonical `wayback` key and a custom-named entry exist,
+    --force --uninstall should remove both."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    SERVER_KEY: SERVER_ENTRY,
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    rc = uninstall("claude-code-user", path=cfg, force=True)
+
+    assert rc == 0
+    assert "mcpServers" not in _read(cfg)
+
+
+def test_set_auth_works_on_custom_key_name(tmp_path: Path) -> None:
+    """set_auth should locate the wayback entry by invocation when the user
+    installed under a non-default key name."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    rc = set_auth("claude-code-user", path=cfg, access_key="A", secret_key="B")
+
+    assert rc == 0
+    env = _read(cfg)["mcpServers"]["wayback-mcp"]["env"]
+    assert env[ACCESS_KEY_ENV] == "A"
+    assert env[SECRET_KEY_ENV] == "B"
+
+
+def test_clear_auth_works_on_custom_key_name(tmp_path: Path) -> None:
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {
+                        "command": "uvx",
+                        "args": ["mcp-server-wayback"],
+                        "env": {ACCESS_KEY_ENV: "A", SECRET_KEY_ENV: "B"},
+                    },
+                }
+            }
+        )
+    )
+
+    rc = clear_auth("claude-code-user", path=cfg)
+
+    assert rc == 0
+    entry = _read(cfg)["mcpServers"]["wayback-mcp"]
+    assert "env" not in entry
+
+
+def test_set_auth_errors_on_ambiguous_multiple_custom_keys(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """If two non-default-key entries both look like our server (and no
+    canonical `wayback` key exists), set_auth should refuse rather than
+    silently picking one."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                    "wayback-dev": {"command": "uv", "args": ["run", "mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    rc = set_auth("claude-code-user", path=cfg, access_key="A", secret_key="B")
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "multiple" in err.lower()
+    assert "wayback-mcp" in err
+    assert "wayback-dev" in err
+
+
+def test_set_auth_prefers_canonical_key_when_both_exist(tmp_path: Path) -> None:
+    """If both `wayback` and a custom-named entry exist, set_auth should
+    target the canonical one (preserves pre-existing behavior)."""
+    cfg = tmp_path / "claude.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    SERVER_KEY: dict(SERVER_ENTRY),
+                    "wayback-mcp": {"command": "uvx", "args": ["mcp-server-wayback"]},
+                }
+            }
+        )
+    )
+
+    rc = set_auth("claude-code-user", path=cfg, access_key="A", secret_key="B")
+
+    assert rc == 0
+    data = _read(cfg)
+    assert data["mcpServers"][SERVER_KEY]["env"][ACCESS_KEY_ENV] == "A"
+    assert "env" not in data["mcpServers"]["wayback-mcp"]

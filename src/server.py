@@ -14,14 +14,18 @@ from wayback_mcp.install import (
     uninstall,
 )
 from wayback_mcp.models import ToolError
-from wayback_mcp.tools.content import get_item_metadata as _get_item_metadata
-from wayback_mcp.tools.content import get_snapshot_content as _get_snapshot_content
+from wayback_mcp.tools.content import (
+    get_item_metadata as _get_item_metadata,
+    get_snapshot_content as _get_snapshot_content,
+)
 from wayback_mcp.tools.snapshots import (
     check_availability as _check_availability,
     lookup_snapshots as _lookup_snapshots,
 )
-from wayback_mcp.tools.search import search_archive as _search_archive
-from wayback_mcp.tools.search import search_domain as _search_domain
+from wayback_mcp.tools.search import (
+    search_archive as _search_archive,
+    search_domain as _search_domain,
+) 
 
 mcp = FastMCP("wayback")
 
@@ -251,7 +255,11 @@ def main() -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="With --install, overwrite an existing wayback entry.",
+        help=(
+            "With --install, overwrite an existing wayback entry. "
+            "With --uninstall, skip the confirmation prompt for entries "
+            "found under non-default key names."
+        ),
     )
     args = parser.parse_args()
 
@@ -304,7 +312,7 @@ def main() -> None:
                 )
                 sys.exit(1)
             client_key = picked.key
-        sys.exit(uninstall(client_key))
+        sys.exit(uninstall(client_key, force=args.force))
 
     if args.set_auth is not None:
         client_key = args.set_auth
