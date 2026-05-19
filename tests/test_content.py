@@ -159,30 +159,18 @@ async def test_get_item_metadata_files_missing_size_does_not_crash():
 # get_snapshot_content tests
 # ---------------------------------------------------------------------------
 
-CDX_URL = "http://web.archive.org/cdx/search/cdx"
 _TARGET_URL = "https://example.com/page"
 _TIMESTAMP = "20231015120000"
 _SNAPSHOT_URL = f"https://web.archive.org/web/{_TIMESTAMP}/{_TARGET_URL}"
 _CONTENT_URL = f"https://web.archive.org/web/{_TIMESTAMP}if_/{_TARGET_URL}"
 
 
-def _cdx_response(mimetype: str) -> list:
-    return [
-        ["timestamp", "original", "mimetype", "statuscode", "digest", "length"],
-        [_TIMESTAMP, _TARGET_URL, mimetype, "200", "SHA1:ABC", "9999"],
-    ]
-
-
-_CDX_EMPTY: list = [["timestamp", "original", "mimetype", "statuscode", "digest", "length"]]
-
-
 @pytest.mark.asyncio
 async def test_get_snapshot_content_html_main():
     html = "<html><body><main>" + "word " * 250 + "</main></body></html>"
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/html")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html, headers={"content-type": "text/html"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, SnapshotContent)
     assert result.content_type == "html"
@@ -198,9 +186,8 @@ async def test_get_snapshot_content_html_main():
 async def test_get_snapshot_content_html_article():
     html = "<html><body><article>" + "word " * 250 + "</article></body></html>"
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/html")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html, headers={"content-type": "text/html"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, SnapshotContent)
     assert result.extraction_method == "article"
@@ -211,9 +198,8 @@ async def test_get_snapshot_content_html_body_fallback():
     # No semantic container — forces body-fallback
     html = "<html><body><div>" + "word " * 600 + "</div></body></html>"
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/html")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html, headers={"content-type": "text/html"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, SnapshotContent)
     assert result.extraction_method == "body-fallback"
@@ -224,9 +210,8 @@ async def test_get_snapshot_content_html_body_fallback():
 async def test_get_snapshot_content_plaintext_capped():
     long_text = "a" * 11000
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/plain")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=long_text))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=long_text, headers={"content-type": "text/plain"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, SnapshotContent)
     assert result.content_type == "plain"
@@ -238,8 +223,8 @@ async def test_get_snapshot_content_plaintext_capped():
 @pytest.mark.asyncio
 async def test_get_snapshot_content_pdf_declined():
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("application/pdf")))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, content=b"%PDF", headers={"content-type": "application/pdf"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, ToolError)
     assert "application/pdf" in result.error
@@ -249,8 +234,8 @@ async def test_get_snapshot_content_pdf_declined():
 @pytest.mark.asyncio
 async def test_get_snapshot_content_image_declined():
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("image/jpeg")))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, content=b"", headers={"content-type": "image/jpeg"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, ToolError)
     assert "image/jpeg" in result.error
@@ -259,9 +244,10 @@ async def test_get_snapshot_content_image_declined():
 
 @pytest.mark.asyncio
 async def test_get_snapshot_content_unavailable_url():
+    content_url = f"https://web.archive.org/web/{_TIMESTAMP}if_/https://example.com/never-archived"
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_CDX_EMPTY))
-        result = await get_snapshot_content("https://example.com/never-archived")
+        respx.get(content_url).mock(return_value=httpx.Response(404))
+        result = await get_snapshot_content("https://example.com/never-archived", timestamp=_TIMESTAMP)
 
     assert isinstance(result, ToolError)
     assert "never-archived" in result.error
@@ -271,9 +257,8 @@ async def test_get_snapshot_content_unavailable_url():
 async def test_get_snapshot_content_malformed_html():
     malformed = "<html><body><main><p>Some content" + " word" * 250  # unclosed tags
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/html")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=malformed))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=malformed, headers={"content-type": "text/html"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, SnapshotContent)
     assert result.content is not None
@@ -284,9 +269,8 @@ async def test_get_snapshot_content_sparse_content_warning():
     # 300 words, no semantic container → body-fallback + sparse warning
     html = "<html><body><div>" + "word " * 300 + "</div></body></html>"
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/html")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html))
-        result = await get_snapshot_content(_TARGET_URL)
+        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html, headers={"content-type": "text/html"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=_TIMESTAMP)
 
     assert isinstance(result, SnapshotContent)
     assert result.extraction_method == "body-fallback"
@@ -295,18 +279,14 @@ async def test_get_snapshot_content_sparse_content_warning():
 
 
 @pytest.mark.asyncio
-async def test_get_snapshot_content_passes_closest_to_when_timestamp_given():
-    # Regression guard: ensure the timestamp arg flows through to CDX as
-    # closest=<ts>&sort=closest, not as a from/to range that would only match
-    # exact-second snapshots.
+async def test_get_snapshot_content_timestamp_appears_in_content_url():
+    # Regression guard: timestamp must flow into the Wayback content URL path.
     html = "<html><body><main>" + "word " * 100 + "</main></body></html>"
+    ts = "20230101120000"
+    content_url = f"https://web.archive.org/web/{ts}if_/{_TARGET_URL}"
     with respx.mock:
-        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=_cdx_response("text/html")))
-        respx.get(_CONTENT_URL).mock(return_value=httpx.Response(200, text=html))
-        result = await get_snapshot_content(_TARGET_URL, timestamp="20230101")
-        cdx_urls = [str(c.request.url) for c in respx.calls if CDX_URL in str(c.request.url)]
+        respx.get(content_url).mock(return_value=httpx.Response(200, text=html, headers={"content-type": "text/html"}))
+        result = await get_snapshot_content(_TARGET_URL, timestamp=ts)
 
     assert isinstance(result, SnapshotContent)
-    assert cdx_urls, "expected at least one CDX call"
-    assert "closest=20230101" in cdx_urls[0]
-    assert "sort=closest" in cdx_urls[0]
+    assert result.timestamp == ts

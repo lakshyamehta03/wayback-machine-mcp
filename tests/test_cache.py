@@ -167,9 +167,9 @@ async def test_get_snapshot_content_429_error_includes_retry_after():
     from wayback_mcp.tools.content import get_snapshot_content
     from wayback_mcp.models import ToolError
 
-    # get_snapshot_content now resolves the snapshot via CDX (one call covers
-    # both availability and mimetype), so a 429 from CDX is what propagates.
-    url = "http://web.archive.org/cdx/search/cdx"
+    # get_snapshot_content now fetches directly from the Wayback content server
+    # (no CDX), so a 429 from the content endpoint is what propagates.
+    url = "https://web.archive.org/web/if_/bbc.com"
     with respx.mock:
         respx.get(url).mock(
             return_value=httpx.Response(429, headers={"Retry-After": "15"}, json={})
