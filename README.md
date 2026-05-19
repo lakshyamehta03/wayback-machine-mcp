@@ -12,6 +12,10 @@
 [![MCP](https://img.shields.io/badge/MCP-1.0+-8A2BE2.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+<br/>
+
+<img src="https://raw.githubusercontent.com/lakshyamehta03/wayback-machine-mcp/main/demo.gif" alt="wayback-mcp demo" width="700" />
+
 </div>
 
 ---
