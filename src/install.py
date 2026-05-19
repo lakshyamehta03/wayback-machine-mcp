@@ -12,6 +12,7 @@ Supported clients:
 - cursor                  Cursor (project-scope: ./.cursor/mcp.json)
 - windsurf                Windsurf (global)
 - zed                     Zed (global; uses `context_servers` key)
+- antigravity             Google Antigravity (global; ~/.gemini/antigravity/mcp_config.json)
 """
 
 from __future__ import annotations
@@ -88,6 +89,10 @@ def _zed_path() -> Path:
     return Path.home() / ".config" / "zed" / "settings.json"
 
 
+def _antigravity_path() -> Path:
+    return Path.home() / ".gemini" / "antigravity" / "mcp_config.json"
+
+
 CLIENTS: tuple[Client, ...] = (
     Client("claude-desktop", "Claude Desktop", _claude_desktop_path),
     Client("claude-code-user", "Claude Code (user-scope, ~/.claude.json)", _claude_code_user_path),
@@ -99,6 +104,7 @@ CLIENTS: tuple[Client, ...] = (
     Client("cursor", "Cursor (project-scope, ./.cursor/mcp.json)", _cursor_project_path),
     Client("windsurf", "Windsurf", _windsurf_path),
     Client("zed", "Zed", _zed_path, container_key="context_servers"),
+    Client("antigravity", "Google Antigravity", _antigravity_path),
 )
 
 
@@ -241,10 +247,14 @@ def install(
     *,
     path: Path | None = None,
     force: bool = False,
+    stream_in=None,
+    stream_out=None,
+    read_secret: Callable[[str], str] | None = None,
 ) -> int:
     """Add the wayback entry to the chosen client's config. Returns an exit code.
 
     `path` overrides the client's default config path (used by tests).
+    After writing the config, optionally prompts for IA API keys inline.
     """
     client = get_client(client_key)
     if client is None:
@@ -280,15 +290,40 @@ def install(
     entry = servers[SERVER_KEY]
     has_auth = bool(entry.get("env", {}).get(ACCESS_KEY_ENV) and entry.get("env", {}).get(SECRET_KEY_ENV))
 
-    print(f"✓ Added wayback to {abs_path}")
-    print(f"Restart {client.label} to load it.")
+    _out = stream_out or sys.stdout
+    print(f"✓ Added wayback to {abs_path}", file=_out)
+    print(f"Restart {client.label} to load it.", file=_out)
+
     if not has_auth:
-        print()
-        print("Optional but recommended: configure free Internet Archive API keys")
-        print("to raise your rate-limit ceiling and avoid 429 errors.")
-        print(f"  1. Get keys (free, 30s): {IA_KEYS_URL}")
-        print(f"  2. Run: mcp-server-wayback --set-auth {client.key}")
-        print("  3. Restart your client.")
+        _in = stream_in if stream_in is not None else sys.stdin
+        # Prompt interactively only when attached to a real terminal (or a test
+        # injects stream_in explicitly). In piped/CI environments fall back to
+        # printing the hint so the user knows what to do next.
+        interactive = stream_in is not None or (hasattr(_in, "isatty") and _in.isatty())
+        print(file=_out)
+        if interactive:
+            print(
+                "Add Internet Archive API keys now for higher rate limits? "
+                "(free account at archive.org, takes 30 seconds) [y/N]: ",
+                end="",
+                file=_out,
+                flush=True,
+            )
+            answer = _in.readline().strip().lower()
+            if answer in ("y", "yes"):
+                return set_auth(
+                    client_key,
+                    path=config_path,
+                    stream_in=_in,
+                    stream_out=_out,
+                    read_secret=read_secret,
+                )
+            print(f"  Get keys (free): {IA_KEYS_URL}", file=_out)
+            print(f"  Run later: mcp-server-wayback --set-auth {client.key}", file=_out)
+        else:
+            print("Optional: add free IA API keys for higher rate limits:", file=_out)
+            print(f"  1. Get keys: {IA_KEYS_URL}", file=_out)
+            print(f"  2. Run: mcp-server-wayback --set-auth {client.key}", file=_out)
     return 0
 
 

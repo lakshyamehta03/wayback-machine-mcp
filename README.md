@@ -58,6 +58,7 @@ uvx mcp-server-wayback --install claude-code-project     # ./.mcp.json in cwd
 uvx mcp-server-wayback --install cursor                  # ./.cursor/mcp.json
 uvx mcp-server-wayback --install windsurf
 uvx mcp-server-wayback --install zed                     # uses Zed's context_servers key
+uvx mcp-server-wayback --install antigravity             # ~/.gemini/antigravity/mcp_config.json
 ```
 
 For clients with their own MCP CLI:
@@ -101,6 +102,7 @@ The `env` block is optional — the server works anonymously without credentials
 |---|---|---|
 | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) | `mcpServers` |
 | Claude Code | `.mcp.json` (project) / `~/.claude.json` (user) | `mcpServers` |
+| Google Antigravity | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` |
 | Codex CLI | `~/.codex/config.toml` | `[mcp_servers.wayback]` |
 | Cursor | `.cursor/mcp.json` | `mcpServers` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
