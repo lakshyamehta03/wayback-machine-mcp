@@ -17,6 +17,7 @@ async def cdx_query(
     status_code: str | None = None,
     limit: int | None = None,
     fast_latest: bool = False,
+    closest: str | None = None,
 ) -> List[Snapshot] | ToolError:
     params: dict[str, str] = {
         "url": url,
@@ -37,6 +38,12 @@ async def cdx_query(
         params["to"] = to_date
     if status_code:
         params["filter"] = f"statuscode:{status_code}"
+    if closest:
+        # CDX returns rows ordered by proximity to this timestamp when
+        # sort=closest is paired with closest=<ts>. Combine with limit=1 to
+        # mimic the availability endpoint's closest-snapshot semantics.
+        params["closest"] = closest
+        params["sort"] = "closest"
 
     response = await get(CDX_URL, "cdx", params=params)
 

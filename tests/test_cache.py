@@ -85,7 +85,8 @@ async def test_check_availability_429_error_includes_retry_after():
     from wayback_mcp.tools.snapshots import check_availability
     from wayback_mcp.models import ToolError
 
-    url = "https://archive.org/wayback/available"
+    # check_availability now resolves via CDX (one rate-limit bucket, cookie auth).
+    url = "http://web.archive.org/cdx/search/cdx"
     with respx.mock:
         respx.get(url).mock(
             return_value=httpx.Response(429, headers={"Retry-After": "12"}, json={})
@@ -166,7 +167,9 @@ async def test_get_snapshot_content_429_error_includes_retry_after():
     from wayback_mcp.tools.content import get_snapshot_content
     from wayback_mcp.models import ToolError
 
-    url = "https://archive.org/wayback/available"
+    # get_snapshot_content now resolves the snapshot via CDX (one call covers
+    # both availability and mimetype), so a 429 from CDX is what propagates.
+    url = "http://web.archive.org/cdx/search/cdx"
     with respx.mock:
         respx.get(url).mock(
             return_value=httpx.Response(429, headers={"Retry-After": "15"}, json={})
@@ -182,7 +185,7 @@ async def test_429_with_no_retry_after_header_falls_back_to_default():
     from wayback_mcp.tools.snapshots import check_availability
     from wayback_mcp.models import ToolError
 
-    url = "https://archive.org/wayback/available"
+    url = "http://web.archive.org/cdx/search/cdx"
     with respx.mock:
         respx.get(url).mock(return_value=httpx.Response(429, json={}))
         result = await check_availability("bbc.com")

@@ -1,35 +1,32 @@
 from wayback_mcp.client.extractor import classify_mime, extract_html, extract_plaintext
 from wayback_mcp.client.http import get
 from wayback_mcp.client.parsers import parse_item_metadata
-from wayback_mcp.config import METADATA_URL, WAYBACK_CONTENT_BASE
+from wayback_mcp.config import METADATA_URL
 from wayback_mcp.models import ItemMetadata, SnapshotContent, ToolError
-from wayback_mcp.tools.snapshots import check_availability, lookup_snapshots
+from wayback_mcp.tools.snapshots import lookup_snapshots
 
 
 async def get_snapshot_content(url: str, timestamp: str | None = None) -> SnapshotContent | ToolError:
-    availability = await check_availability(url, timestamp)
-    if isinstance(availability, ToolError):
-        return availability
-    if not availability.available:
-        return ToolError(error=f"No archived snapshot found for '{url}'.")
+    if timestamp:
+        snapshots = await lookup_snapshots(url, closest_to=timestamp, limit=1, collapse="")
+    else:
+        snapshots = await lookup_snapshots(url, latest=True, limit=1, collapse="")
 
-    resolved_ts = availability.timestamp
-    snapshot_url = availability.snapshot_url
-
-    snapshots = await lookup_snapshots(url, from_date=resolved_ts, to_date=resolved_ts, limit=1)
     if isinstance(snapshots, ToolError):
         return snapshots
+    if not snapshots:
+        return ToolError(error=f"No archived snapshot found for '{url}'.")
 
-    mime_class = classify_mime(snapshots[0].mimetype) if snapshots else "html"
+    snap = snapshots[0]
+    snapshot_url = snap.wayback_url
+    mime_class = classify_mime(snap.mimetype)
 
     if mime_class == "declined":
-        mime_label = snapshots[0].mimetype if snapshots else "unknown"
         return ToolError(
-            error=f"Content type '{mime_label}' is not supported for extraction. View snapshot: {snapshot_url}"
+            error=f"Content type '{snap.mimetype}' is not supported for extraction. View snapshot: {snapshot_url}"
         )
 
-    content_url = f"{WAYBACK_CONTENT_BASE}/{resolved_ts}if_/{url}"
-    response = await get(content_url, "content")
+    response = await get(snap.content_url, "content")
 
     if isinstance(response, ToolError):
         return response
@@ -43,7 +40,7 @@ async def get_snapshot_content(url: str, timestamp: str | None = None) -> Snapsh
         word_count=result.word_count,
         truncated=result.truncated,
         snapshot_url=snapshot_url,
-        timestamp=resolved_ts,
+        timestamp=snap.timestamp,
         sparse_content_warning=(result.word_count < 500 and result.method == "body-fallback"),
     )
 

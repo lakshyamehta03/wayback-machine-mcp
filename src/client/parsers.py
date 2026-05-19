@@ -1,6 +1,6 @@
 from typing import List
 
-from wayback_mcp.models import AvailabilityResult, ItemMetadata, SearchResult, Snapshot
+from wayback_mcp.models import ItemMetadata, SearchResult, Snapshot
 
 
 def parse_cdx(raw: list) -> List[Snapshot]:
@@ -74,14 +74,3 @@ def parse_item_metadata(data: dict) -> ItemMetadata:
     )
 
 
-def parse_availability(url: str, data: dict) -> AvailabilityResult:
-    closest = data.get("archived_snapshots", {}).get("closest")
-    if not closest:
-        return AvailabilityResult(original_url=url, available=False)
-    return AvailabilityResult(
-        original_url=url,
-        available=closest.get("available", False),
-        snapshot_url=closest.get("url"),
-        timestamp=closest.get("timestamp"),
-        status=closest.get("status"),
-    )

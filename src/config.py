@@ -1,7 +1,6 @@
 import os
 import sys
 
-AVAILABILITY_URL = "https://archive.org/wayback/available"
 CDX_URL = "http://web.archive.org/cdx/search/cdx"
 SEARCH_URL = "https://archive.org/advancedsearch.php"
 METADATA_URL = "https://archive.org/metadata"

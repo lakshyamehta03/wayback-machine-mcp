@@ -5,7 +5,6 @@ import httpx
 from wayback_mcp.tools.snapshots import check_availability, lookup_snapshots
 from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError
 
-AVAILABILITY_URL = "https://archive.org/wayback/available"
 CDX_URL = "http://web.archive.org/cdx/search/cdx"
 
 CDX_MULTI_ROW = [
@@ -14,35 +13,23 @@ CDX_MULTI_ROW = [
     ["20060305120000", "http://www.bbc.com/news", "text/html", "301", "SHA1:DEF456", "500"],
 ]
 
-ARCHIVED_RESPONSE = {
-    "url": "bbc.com",
-    "archived_snapshots": {
-        "closest": {
-            "status": "200",
-            "available": True,
-            "url": "http://web.archive.org/web/20050102091250/http://www.bbc.com:80/",
-            "timestamp": "20050102091250",
-        }
-    },
-}
+CDX_SINGLE_ROW = [
+    ["timestamp", "original", "mimetype", "statuscode", "digest", "length"],
+    ["20050102091250", "http://www.bbc.com/", "text/html", "200", "SHA1:ABC123", "1234"],
+]
 
-UNARCHIVED_RESPONSE = {
-    "url": "xyzzy-never-archived-abc123.com",
-    "archived_snapshots": {},
-}
+CDX_EMPTY = [["timestamp", "original", "mimetype", "statuscode", "digest", "length"]]
 
 
 @pytest.mark.asyncio
 async def test_check_availability_archived_url():
     with respx.mock:
-        respx.get(AVAILABILITY_URL).mock(
-            return_value=httpx.Response(200, json=ARCHIVED_RESPONSE)
-        )
+        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_SINGLE_ROW))
         result = await check_availability("bbc.com")
 
     assert isinstance(result, AvailabilityResult)
     assert result.available is True
-    assert result.snapshot_url == "http://web.archive.org/web/20050102091250/http://www.bbc.com:80/"
+    assert result.snapshot_url == "https://web.archive.org/web/20050102091250/http://www.bbc.com/"
     assert result.timestamp == "20050102091250"
     assert result.status == "200"
     assert result.original_url == "bbc.com"
@@ -52,9 +39,7 @@ async def test_check_availability_archived_url():
 @pytest.mark.asyncio
 async def test_check_availability_unarchived_url():
     with respx.mock:
-        respx.get(AVAILABILITY_URL).mock(
-            return_value=httpx.Response(200, json=UNARCHIVED_RESPONSE)
-        )
+        respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_EMPTY))
         result = await check_availability("xyzzy-never-archived-abc123.com")
 
     assert isinstance(result, AvailabilityResult)
@@ -68,23 +53,36 @@ async def test_check_availability_unarchived_url():
 @pytest.mark.asyncio
 async def test_check_availability_forwards_timestamp():
     with respx.mock:
-        route = respx.get(AVAILABILITY_URL).mock(
-            return_value=httpx.Response(200, json=ARCHIVED_RESPONSE)
-        )
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_SINGLE_ROW))
         await check_availability("bbc.com", timestamp="20050101")
 
     assert route.called
-    request = route.calls.last.request
-    assert "timestamp=20050101" in str(request.url)
+    qs = str(route.calls.last.request.url)
+    # closest_to flows through as CDX's closest=/sort=closest pair
+    assert "closest=20050101" in qs
+    assert "sort=closest" in qs
+
+
+@pytest.mark.asyncio
+async def test_check_availability_no_timestamp_uses_fast_latest():
+    """Without a timestamp, check_availability should ride CDX's fastLatest
+    path (cheap, single most-recent capture) rather than re-querying the
+    closest-in-time index."""
+    with respx.mock:
+        route = respx.get(CDX_URL).mock(return_value=httpx.Response(200, json=CDX_SINGLE_ROW))
+        await check_availability("bbc.com")
+
+    qs = str(route.calls.last.request.url)
+    assert "fastLatest=true" in qs
 
 
 @pytest.mark.asyncio
 async def test_check_availability_429_retry_after():
     with respx.mock:
-        respx.get(AVAILABILITY_URL).mock(
+        respx.get(CDX_URL).mock(
             side_effect=[
                 httpx.Response(429, headers={"Retry-After": "0"}, json={}),
-                httpx.Response(200, json=ARCHIVED_RESPONSE),
+                httpx.Response(200, json=CDX_SINGLE_ROW),
             ]
         )
         result = await check_availability("bbc.com")
@@ -147,9 +145,7 @@ async def test_lookup_snapshots_status_code_filter():
 @pytest.mark.asyncio
 async def test_check_availability_malformed_response():
     with respx.mock:
-        respx.get(AVAILABILITY_URL).mock(
-            return_value=httpx.Response(200, content=b"not json at all <<<")
-        )
+        respx.get(CDX_URL).mock(return_value=httpx.Response(200, content=b"not json at all <<<"))
         result = await check_availability("bbc.com")
 
     assert isinstance(result, ToolError)

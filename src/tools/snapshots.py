@@ -1,9 +1,6 @@
 from typing import List
 
 from wayback_mcp.client.cdx import cdx_query
-from wayback_mcp.client.http import get
-from wayback_mcp.client.parsers import parse_availability
-from wayback_mcp.config import AVAILABILITY_URL
 from wayback_mcp.models import AvailabilityResult, Snapshot, ToolError
 
 
@@ -13,25 +10,33 @@ async def check_availability(
 ) -> AvailabilityResult | ToolError:
     """Check whether the Wayback Machine has a snapshot for the URL.
 
+    Implemented on top of CDX (lookup_snapshots) so the whole tool surface
+    shares one upstream endpoint, one rate-limit bucket, and the cookie-based
+    auth routing that meaningfully raises success rate under load (#26).
+    Closest-in-time semantics are preserved via CDX's closest=/sort=closest.
+
     Responses are cached at the HTTP layer for the cdx bucket TTL, so a
     no-timestamp lookup ("most recent snapshot") may miss a brand-new
     capture for up to that TTL.
     """
-    params: dict[str, str] = {"url": url}
     if timestamp:
-        params["timestamp"] = timestamp
+        snapshots = await lookup_snapshots(url, closest_to=timestamp, limit=1, collapse="")
+    else:
+        snapshots = await lookup_snapshots(url, latest=True, limit=1, collapse="")
 
-    response = await get(AVAILABILITY_URL, "cdx", params=params)
+    if isinstance(snapshots, ToolError):
+        return snapshots
+    if not snapshots:
+        return AvailabilityResult(original_url=url, available=False)
 
-    if isinstance(response, ToolError):
-        return response
-
-    try:
-        data = response.json()
-    except Exception:
-        return ToolError(error="Failed to parse availability response from the Wayback Machine.")
-
-    return parse_availability(url, data)
+    snap = snapshots[0]
+    return AvailabilityResult(
+        original_url=url,
+        available=True,
+        snapshot_url=snap.wayback_url,
+        timestamp=snap.timestamp,
+        status=snap.status_code,
+    )
 
 
 async def lookup_snapshots(
@@ -42,6 +47,7 @@ async def lookup_snapshots(
     limit: int | None = None,
     collapse: str | None = None,
     latest: bool = False,
+    closest_to: str | None = None,
 ) -> List[Snapshot] | ToolError:
     """Return CDX snapshots for a URL.
 
@@ -54,10 +60,19 @@ async def lookup_snapshots(
 
     `latest=True` uses CDX's fastLatest path to return the N most recent
     captures cheaply. Cannot be combined with `from_date`/`to_date`.
+
+    `closest_to=<ts>` orders results by proximity to that timestamp (CDX
+    closest=/sort=closest). Pair with limit=1 to fetch the single nearest
+    capture — same semantics as the availability endpoint, but one
+    bucket-aligned request instead of two.
     """
     if latest and (from_date or to_date):
         return ToolError(
             error="'latest' cannot be combined with from_date/to_date filters."
+        )
+    if closest_to and (latest or from_date or to_date):
+        return ToolError(
+            error="'closest_to' cannot be combined with latest/from_date/to_date."
         )
 
     effective_collapse: str | None
@@ -84,4 +99,5 @@ async def lookup_snapshots(
         limit=effective_limit,
         collapse=effective_collapse,
         fast_latest=latest,
+        closest=closest_to,
     )
