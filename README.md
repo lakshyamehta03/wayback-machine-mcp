@@ -306,6 +306,13 @@ uv run pytest --integration    # also hit live Internet Archive APIs
 
 CI runs the unit suite on every push and pull request via GitHub Actions.
 
+## Known issues
+
+A couple of things to know:
+
+- **Unparseable content types** — some snapshots contain MIME types the agent can't extract text from (binaries, certain media). When that happens the server returns a structured error pointing you to the snapshot URL for manual review, rather than failing silently.
+- **Flaky upstream endpoints** — the Internet Archive's APIs (especially CDX) occasionally behave unexpectedly: timeouts, `503`s, or degraded responses under load. The server retries with back-off and trips a circuit breaker, but a request may still fail and need a retry. Configuring [Internet Archive API keys](#authentication) meaningfully improves success rates.
+
 ## License
 
 [MIT](LICENSE). The Wayback Machine logo is © Internet Archive and used here under fair use to identify the upstream service this project integrates with.
